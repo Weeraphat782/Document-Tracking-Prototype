@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, QrCode, CheckCircle, AlertCircle, Loader, Camera, Type, Users, User, Package, Truck, Clock } from "lucide-react"
+import { ArrowLeft, QrCode, CheckCircle, AlertCircle, Loader, Camera, Type, Users, User, Package, Truck, Clock, Eye } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
@@ -26,7 +26,11 @@ export default function ScanQR() {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [scanMode, setScanMode] = useState<"camera" | "manual">("manual")
+  const [lastScannedData, setLastScannedData] = useState<string>("")
+  const [scanCooldown, setScanCooldown] = useState(false)
   const [hasCamera, setHasCamera] = useState(false)
+  const [scannedDocument, setScannedDocument] = useState<any>(null)
+  const [showDocumentInfo, setShowDocumentInfo] = useState(false)
   
   const router = useRouter()
   const { toast } = useToast()
@@ -94,6 +98,13 @@ export default function ScanQR() {
     setScanResult(null)
 
     try {
+      console.log("Processing scan:", {
+        documentId: documentId.trim(),
+        action,
+        userRole: user.role,
+        comments: comments.trim()
+      })
+
       // Simulate scanning delay
       await new Promise(resolve => setTimeout(resolve, 2000))
 
@@ -104,6 +115,7 @@ export default function ScanQR() {
         comments.trim() || undefined
       )
 
+      console.log("Scan result:", result)
       setScanResult(result)
 
       if (result.success) {
@@ -117,6 +129,7 @@ export default function ScanQR() {
         setAction("")
         setComments("")
       } else {
+        console.log("Scan failed:", result.message, result.warnings)
         toast({
           title: "Scan Failed",
           description: result.message,
@@ -124,6 +137,7 @@ export default function ScanQR() {
         })
       }
     } catch (error) {
+      console.error("Error processing scan:", error)
       toast({
         title: "Error Processing Scan",
         description: "An unexpected error occurred. Please try again.",
@@ -287,6 +301,89 @@ export default function ScanQR() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
           {/* Scanning Interface */}
+          {/* Scanned Document Info */}
+          {showDocumentInfo && scannedDocument && (
+            <Card className="border-green-200 bg-green-50">
+              <CardHeader>
+                <CardTitle className="flex items-center text-green-800">
+                  <CheckCircle className="h-5 w-5 mr-2" />
+                  Scanned Document
+                </CardTitle>
+                <CardDescription className="text-green-600">
+                  Document information found in system
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-3">
+                    <div>
+                      <p className="font-medium text-green-800">Document ID</p>
+                      <p className="text-sm text-green-700 font-mono bg-white px-2 py-1 rounded border">
+                        {scannedDocument.id}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-800">Document Title</p>
+                      <p className="text-sm text-green-700">{scannedDocument.title}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-800">Type</p>
+                      <p className="text-sm text-green-700">{scannedDocument.type}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="font-medium text-green-800">Current Status</p>
+                      <Badge variant="outline" className="text-xs">
+                        {scannedDocument.status}
+                      </Badge>
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-800">Workflow Type</p>
+                      <p className="text-sm text-green-700">
+                        {scannedDocument.workflow === 'flow' ? 'Flow (Multi-level approval)' : 'Drop (Direct delivery)'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-800">Created By</p>
+                      <p className="text-sm text-green-700">{scannedDocument.createdBy}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                {scannedDocument.description && (
+                  <div className="mt-4 pt-4 border-t border-green-200">
+                    <p className="font-medium text-green-800">Description</p>
+                    <p className="text-sm text-green-700 mt-1">{scannedDocument.description}</p>
+                  </div>
+                )}
+
+                <div className="mt-4 pt-4 border-t border-green-200 flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setShowDocumentInfo(false)
+                      setScannedDocument(null)
+                      setDocumentId("")
+                    }}
+                  >
+                    <Camera className="h-4 w-4 mr-2" />
+                    Scan Again
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => router.push(`/document/${scannedDocument.id}`)}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Details
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -294,59 +391,148 @@ export default function ScanQR() {
                 Document Scanner
               </CardTitle>
               <CardDescription>
-                Scan QR code or enter document ID manually
+                {showDocumentInfo ? "Select the action you want to perform on this document" : "Scan QR code or enter document ID manually"}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               
               {/* Scan Mode Selection */}
-              <div className="flex space-x-2">
-                <Button
-                  variant={scanMode === "camera" ? "default" : "outline"}
-                  onClick={() => setScanMode("camera")}
-                  disabled={!hasCamera}
-                  className="flex-1"
-                >
-                  <Camera className="h-4 w-4 mr-2" />
-                  Camera
-                </Button>
-                <Button
-                  variant={scanMode === "manual" ? "default" : "outline"}
-                  onClick={() => setScanMode("manual")}
-                  className="flex-1"
-                >
-                  <Type className="h-4 w-4 mr-2" />
-                  Manual Entry
-                </Button>
-              </div>
+              {!showDocumentInfo && (
+                <div className="flex space-x-2">
+                  <Button
+                    variant={scanMode === "camera" ? "default" : "outline"}
+                    onClick={() => setScanMode("camera")}
+                    disabled={!hasCamera}
+                    className="flex-1"
+                  >
+                    <Camera className="h-4 w-4 mr-2" />
+                    Camera
+                  </Button>
+                  <Button
+                    variant={scanMode === "manual" ? "default" : "outline"}
+                    onClick={() => setScanMode("manual")}
+                    className="flex-1"
+                  >
+                    <Type className="h-4 w-4 mr-2" />
+                    Manual Entry
+                  </Button>
+                </div>
+              )}
 
               {/* Camera Scan */}
-              {scanMode === "camera" && (
+              {!showDocumentInfo && scanMode === "camera" && (
                 <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-blue-800">
+                      📱 <strong>Camera is active.</strong> Point your camera at a document cover sheet QR code.
+                      The scanner will automatically detect valid QR codes.
+                    </p>
+                  </div>
                   <QRScanner 
                     onScan={(data) => {
-                      console.log("QR Code scanned:", data)
-                      // Extract document ID from QR code
+                      // Prevent duplicate scans
+                      if (scanCooldown || data === lastScannedData) {
+                        console.log("⏳ Scan cooldown active or duplicate scan, ignoring...")
+                        return
+                      }
+
+                      setScanCooldown(true)
+                      setLastScannedData(data)
+                      
+                      // Reset cooldown after 3 seconds
+                      setTimeout(() => {
+                        setScanCooldown(false)
+                      }, 3000)
+
+                      console.log("=== QR SCAN START ===")
+                      console.log("Raw QR Code data:", data)
+                      console.log("Data type:", typeof data)
+                      console.log("Data length:", data?.length)
+                      
                       let docId = ""
-                      if (data.includes("document/")) {
-                        const matches = data.match(/document\/([^\/\?]+)/)
-                        docId = matches ? matches[1] : ""
-                      } else if (data.startsWith("DOC-")) {
-                        docId = data
+                      let isValidQR = false
+                      let parseMethod = ""
+                      
+                      try {
+                        // Try to parse as JSON first (our system's format)
+                        const parsed = JSON.parse(data)
+                        console.log("JSON parse successful:", parsed)
+                        
+                        if (parsed.documentId && typeof parsed.documentId === 'string') {
+                          docId = parsed.documentId
+                          isValidQR = true
+                          parseMethod = "JSON"
+                          console.log("✅ Valid JSON QR code - Document ID:", docId)
+                        } else {
+                          console.log("❌ JSON missing documentId field")
+                        }
+                      } catch (e) {
+                        console.log("Not JSON, trying other formats...")
+                        
+                        if (data && data.includes("document/")) {
+                          // URL format: https://example.com/document/DOC-123
+                          const matches = data.match(/document\/([^\/\?]+)/)
+                          docId = matches ? matches[1] : ""
+                          isValidQR = !!docId
+                          parseMethod = "URL"
+                          console.log("URL format - Document ID:", docId)
+                        } else if (data && data.startsWith("DOC-")) {
+                          // Direct document ID format
+                          docId = data
+                          isValidQR = true
+                          parseMethod = "Direct ID"
+                          console.log("Direct ID format - Document ID:", docId)
+                        } else if (data && /^[A-Z0-9-]+$/.test(data.trim()) && data.length > 5) {
+                          // Generic alphanumeric code that could be a document ID
+                          docId = data.trim()
+                          isValidQR = true
+                          parseMethod = "Generic ID"
+                          console.log("Generic ID format - Document ID:", docId)
+                        }
                       }
                       
-                      if (docId) {
-                        setDocumentId(docId)
-                        toast({
-                          title: "QR Code Detected",
-                          description: `Document ${docId} scanned successfully`,
-                        })
+                      console.log("Final result:", { docId, isValidQR, parseMethod })
+                      console.log("=== QR SCAN END ===")
+                      
+                      if (isValidQR && docId) {
+                        // Stop camera scanning
+                        setScanMode("manual")
+                        
+                        // Load document details
+                        const loadDocumentDetails = async () => {
+                          try {
+                            const document = await EnhancedDocumentService.getDocumentById(docId)
+                            if (document) {
+                              setScannedDocument(document)
+                              setDocumentId(docId)
+                              setShowDocumentInfo(true)
+                              toast({
+                                title: "✅ Document Found",
+                                description: `Found document: ${document.title}`,
+                              })
+                            } else {
+                              toast({
+                                title: "❌ Document Not Found",
+                                description: `Document ID: ${docId} not found in system`,
+                                variant: "destructive"
+                              })
+                            }
+                          } catch (error) {
+                            console.error("Error loading document:", error)
+                            toast({
+                              title: "❌ Error Occurred",
+                              description: "Unable to load document information",
+                              variant: "destructive"
+                            })
+                          }
+                        }
+                        
+                        loadDocumentDetails()
                       } else {
-                        toast({
-                          title: "Invalid QR Code",
-                          description: "This QR code is not from our document tracking system",
-                          variant: "destructive"
-                        })
+                        console.log("❌ INVALID QR - Raw data:", data)
+                        // Don't show error toast for invalid QR codes during scanning
+                        // This prevents spam when camera sees random patterns
+                        console.log("Ignoring invalid QR pattern during continuous scanning")
                       }
                     }}
                     onError={(error) => {
@@ -361,7 +547,7 @@ export default function ScanQR() {
               )}
 
               {/* Manual Entry */}
-              {scanMode === "manual" && (
+              {!showDocumentInfo && scanMode === "manual" && (
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="documentId">Document ID</Label>
@@ -377,6 +563,9 @@ export default function ScanQR() {
                         Load
                       </Button>
                     </div>
+                    <p className="text-xs text-gray-600">
+                      💡 Tip: Go to Dashboard → View any document → Copy the Document ID from the details page
+                    </p>
                   </div>
                 </div>
               )}
@@ -508,6 +697,37 @@ export default function ScanQR() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* QR Code Format Info */}
+            <Card className="bg-blue-50 border-blue-200">
+              <CardHeader>
+                <CardTitle className="text-blue-800">QR Code Format</CardTitle>
+                <CardDescription className="text-blue-600">
+                  What QR codes work with this system
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <p className="font-medium text-blue-800">✅ Supported formats:</p>
+                    <ul className="mt-2 space-y-1 text-blue-700">
+                      <li>• Document cover sheet QR codes (JSON format)</li>
+                      <li>• Document IDs starting with "DOC-"</li>
+                      <li>• URLs containing "/document/DOC-..."</li>
+                      <li>• Alphanumeric codes (5+ characters)</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="font-medium text-blue-800">📋 To test:</p>
+                    <ul className="mt-2 space-y-1 text-blue-700">
+                      <li>• Create a document first</li>
+                      <li>• Print the cover sheet</li>
+                      <li>• Scan the QR code on the cover sheet</li>
+                    </ul>
+                  </div>
                 </div>
               </CardContent>
             </Card>
