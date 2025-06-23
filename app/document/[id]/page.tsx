@@ -217,97 +217,109 @@ export default function DocumentDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center py-4">
+      {/* Mobile-optimized Header */}
+      <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
+          <div className="flex items-center py-3 sm:py-4">
             <Link href="/dashboard">
-              <Button variant="ghost" size="sm" className="mr-4">
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Dashboard
+              <Button variant="ghost" size="sm" className="mr-2 sm:mr-4 px-2 sm:px-3">
+                <ArrowLeft className="h-4 w-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Back to Dashboard</span>
+                <span className="sm:hidden">Back</span>
               </Button>
             </Link>
-            <div className="flex items-center">
-              <FileText className="h-6 w-6 mr-2 text-blue-600" />
-              <h1 className="text-2xl font-bold text-gray-900">Document Details</h1>
+            <div className="flex items-center min-w-0 flex-1">
+              <FileText className="h-5 w-5 sm:h-6 sm:w-6 mr-2 text-blue-600 flex-shrink-0" />
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">
+                <span className="hidden sm:inline">Document Details</span>
+                <span className="sm:hidden">Details</span>
+              </h1>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           
           {/* Main Document Information */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             
             {/* Document Header */}
             <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center">
-                      <FileText className="h-5 w-5 mr-2" />
-                      {document.title}
+              <CardHeader className="pb-3 sm:pb-6">
+                <div className="space-y-3 sm:space-y-0 sm:flex sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <CardTitle className="flex items-center text-base sm:text-lg">
+                      <FileText className="h-4 w-4 sm:h-5 sm:w-5 mr-2 flex-shrink-0" />
+                      <span className="truncate">{document.title}</span>
                     </CardTitle>
-                    <CardDescription className="flex items-center space-x-2 mt-2">
-                      <Badge variant="outline">{document.id}</Badge>
-                      <Badge variant="outline">{document.type}</Badge>
-                      <div className="flex items-center space-x-1">
+                    <CardDescription className="mt-2 space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="text-xs font-mono">{document.id}</Badge>
+                        <Badge variant="outline" className="text-xs">{document.type}</Badge>
+                      </div>
+                      <div className="flex items-center space-x-1 text-xs sm:text-sm">
                         {document.workflow === "flow" ? (
-                          <Users className="h-4 w-4" />
+                          <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                         ) : (
-                          <User className="h-4 w-4" />
+                          <User className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
                         )}
-                        <span className="text-sm">
+                        <span className="truncate">
                           {document.workflow === "flow" ? "Multi-level Approval" : "Direct Delivery"}
                         </span>
                       </div>
                     </CardDescription>
                   </div>
-                  <Badge className={getStatusColor(document.status)}>
-                    {getStatusIcon(document.status)}
-                    <span className="ml-1">{document.status}</span>
-                  </Badge>
+                  <div className="flex-shrink-0">
+                    <Badge className={`${getStatusColor(document.status)} text-xs sm:text-sm px-2 sm:px-3 py-1`}>
+                      <span className="flex items-center">
+                        {getStatusIcon(document.status)}
+                        <span className="ml-1 truncate max-w-[120px] sm:max-w-none">{document.status}</span>
+                      </span>
+                    </Badge>
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <CardContent className="space-y-3 sm:space-y-4 pt-3 sm:pt-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Created By</p>
-                    <p className="text-sm">{document.createdBy}</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Created By</p>
+                    <p className="text-sm sm:text-base truncate">{document.createdBy}</p>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Created Date</p>
-                    <p className="text-sm">{new Date(document.createdAt).toLocaleString()}</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Created Date</p>
+                    <p className="text-sm sm:text-base">{new Date(document.createdAt).toLocaleString()}</p>
                   </div>
                   {document.updatedAt && (
-                    <>
-                      <div>
-                        <p className="text-sm font-medium text-gray-600">Last Updated</p>
-                        <p className="text-sm">{new Date(document.updatedAt).toLocaleString()}</p>
-                      </div>
-                    </>
+                    <div className="sm:col-span-2">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Last Updated</p>
+                      <p className="text-sm sm:text-base">{new Date(document.updatedAt).toLocaleString()}</p>
+                    </div>
                   )}
                   {document.workflow === "drop" && document.recipient && (
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">Recipient</p>
-                      <p className="text-sm">{document.recipient}</p>
+                    <div className="sm:col-span-2">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">Recipient</p>
+                      <p className="text-sm sm:text-base truncate">{document.recipient}</p>
                     </div>
                   )}
                 </div>
                 
                 {document.description && (
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Description</p>
-                    <p className="text-sm mt-1 p-3 bg-gray-50 rounded">{document.description}</p>
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">Description</p>
+                    <div className="text-sm sm:text-base mt-1 p-3 bg-gray-50 rounded break-words">
+                      {document.description}
+                    </div>
                   </div>
                 )}
 
                 {document.rejectionReason && (
                   <Alert variant="destructive">
-                    <XCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      <strong>Rejection Reason:</strong> {document.rejectionReason}
+                    <XCircle className="h-4 w-4 flex-shrink-0" />
+                    <AlertDescription className="text-sm">
+                      <strong>Rejection Reason:</strong> 
+                      <div className="mt-1 break-words">{document.rejectionReason}</div>
                     </AlertDescription>
                   </Alert>
                 )}
@@ -317,55 +329,57 @@ export default function DocumentDetailPage() {
             {/* Approval Hierarchy (for Flow workflow) */}
             {document.workflow === "flow" && document.approvalSteps && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Users className="h-5 w-5 mr-2" />
+                <CardHeader className="pb-3 sm:pb-6">
+                  <CardTitle className="flex items-center text-base sm:text-lg">
+                    <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                     Approval Hierarchy
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-sm">
                     Document approval progress and hierarchy
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
+                <CardContent className="pt-3 sm:pt-6">
+                  <div className="space-y-2 sm:space-y-3">
                     {document.approvalSteps.map((step, index) => (
                       <div 
                         key={step.approverEmail}
-                        className={`flex items-center justify-between p-3 rounded-lg border ${
+                        className={`flex items-start sm:items-center justify-between p-3 rounded-lg border ${
                           index === document.currentStepIndex ? 'bg-blue-50 border-blue-200' : 
                           step.status === "approved" ? 'bg-green-50 border-green-200' :
                           step.status === "rejected" ? 'bg-red-50 border-red-200' : 
                           'bg-gray-50 border-gray-200'
                         }`}
                       >
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-start space-x-2 sm:space-x-3 min-w-0 flex-1">
                           <Badge 
                             variant={index === document.currentStepIndex ? "default" : "outline"}
-                            className="w-8 h-8 rounded-full flex items-center justify-center p-0"
+                            className="w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center p-0 text-xs sm:text-sm flex-shrink-0"
                           >
                             {index + 1}
                           </Badge>
-                          <div>
-                            <p className="font-medium text-sm">{step.approverEmail}</p>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-xs sm:text-sm truncate">{step.approverEmail}</p>
                             {step.timestamp && (
-                              <p className="text-xs text-gray-500">
+                              <p className="text-xs text-gray-500 mt-1">
                                 {step.status === "approved" ? "Approved" : "Rejected"} on{" "}
-                                {new Date(step.timestamp).toLocaleString()}
+                                <span className="block sm:inline">
+                                  {new Date(step.timestamp).toLocaleString()}
+                                </span>
                               </p>
                             )}
                             {step.comments && (
-                              <p className="text-xs text-gray-600 mt-1 italic">"{step.comments}"</p>
+                              <p className="text-xs text-gray-600 mt-1 italic break-words">"{step.comments}"</p>
                             )}
                           </div>
                         </div>
-                        <div>
-                          {step.status === "approved" && <CheckCircle className="h-5 w-5 text-green-600" />}
-                          {step.status === "rejected" && <XCircle className="h-5 w-5 text-red-600" />}
+                        <div className="flex-shrink-0 ml-2">
+                          {step.status === "approved" && <CheckCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-600" />}
+                          {step.status === "rejected" && <XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-red-600" />}
                           {step.status === "pending" && index === document.currentStepIndex && (
-                            <Clock className="h-5 w-5 text-blue-600" />
+                            <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
                           )}
                           {step.status === "pending" && index !== document.currentStepIndex && (
-                            <Clock className="h-5 w-5 text-gray-400" />
+                            <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                           )}
                         </div>
                       </div>
@@ -377,39 +391,39 @@ export default function DocumentDetailPage() {
 
             {/* Action History */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <History className="h-5 w-5 mr-2" />
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="flex items-center text-base sm:text-lg">
+                  <History className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                   Action History
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-sm">
                   Complete audit trail of document actions
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
+              <CardContent className="pt-3 sm:pt-6">
+                <div className="space-y-2 sm:space-y-3">
                   {document.actionHistory.map((action) => (
-                    <div key={action.id} className="flex items-start space-x-3 p-3 border rounded-lg">
-                      <div className="mt-0.5">
+                    <div key={action.id} className="flex items-start space-x-2 sm:space-x-3 p-3 border rounded-lg">
+                      <div className="mt-0.5 flex-shrink-0">
                         {getActionIcon(action.action)}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between">
-                          <p className="font-medium text-sm capitalize">{action.action}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
+                          <p className="font-medium text-xs sm:text-sm capitalize">{action.action}</p>
                           <p className="text-xs text-gray-500">
                             {new Date(action.performedAt).toLocaleString()}
                           </p>
                         </div>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-xs sm:text-sm text-gray-600 truncate">
                           Performed by {action.performedBy}
                         </p>
                         {action.previousStatus && (
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-gray-500 break-words">
                             Status changed from "{action.previousStatus}" to "{action.newStatus}"
                           </p>
                         )}
                         {action.comments && (
-                          <p className="text-xs text-gray-600 mt-1 italic">"{action.comments}"</p>
+                          <p className="text-xs text-gray-600 mt-1 italic break-words">"{action.comments}"</p>
                         )}
                       </div>
                     </div>
@@ -420,24 +434,26 @@ export default function DocumentDetailPage() {
           </div>
 
           {/* Actions Panel */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             
             {/* Current Status */}
             <Card>
-              <CardHeader>
-                <CardTitle>Current Status</CardTitle>
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="text-base sm:text-lg">Current Status</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 sm:space-y-4 pt-3 sm:pt-6">
                 <div className="text-center">
-                  <Badge className={`${getStatusColor(document.status)} text-base px-3 py-2`}>
-                    {getStatusIcon(document.status)}
-                    <span className="ml-2">{document.status}</span>
+                  <Badge className={`${getStatusColor(document.status)} text-sm sm:text-base px-2 sm:px-3 py-1 sm:py-2`}>
+                    <span className="flex items-center">
+                      {getStatusIcon(document.status)}
+                      <span className="ml-1 sm:ml-2 break-words max-w-[200px]">{document.status}</span>
+                    </span>
                   </Badge>
                 </div>
                 
                 {document.workflow === "flow" && document.approvalSteps && (
                   <div className="text-center">
-                    <p className="text-sm text-gray-600">
+                    <p className="text-xs sm:text-sm text-gray-600">
                       Progress: {document.approvalSteps.filter(s => s.status === "approved").length} of{" "}
                       {document.approvalSteps.length} approvals completed
                     </p>
@@ -448,21 +464,21 @@ export default function DocumentDetailPage() {
 
             {/* Quick Actions */}
             <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="text-base sm:text-lg">Quick Actions</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-2 sm:space-y-3 pt-3 sm:pt-6">
                 <Link href="/scan-qr">
-                  <Button variant="outline" className="w-full">
-                    <QrCode className="h-4 w-4 mr-2" />
-                    Scan QR Code
+                  <Button variant="outline" className="w-full text-sm sm:text-base py-2 sm:py-3">
+                    <QrCode className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">Scan QR Code</span>
                   </Button>
                 </Link>
                 
                 <Link href={`/cover-sheet/${document.id}`}>
-                  <Button variant="outline" className="w-full">
-                    <FileText className="h-4 w-4 mr-2" />
-                    View Cover Sheet
+                  <Button variant="outline" className="w-full text-sm sm:text-base py-2 sm:py-3">
+                    <FileText className="h-4 w-4 mr-2 flex-shrink-0" />
+                    <span className="truncate">View Cover Sheet</span>
                   </Button>
                 </Link>
               </CardContent>
@@ -471,48 +487,51 @@ export default function DocumentDetailPage() {
             {/* Approval Actions (for approvers) */}
             {canUserApprove() && (
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-orange-600">Pending Your Approval</CardTitle>
-                  <CardDescription>
+                <CardHeader className="pb-3 sm:pb-6">
+                  <CardTitle className="text-orange-600 text-base sm:text-lg">Pending Your Approval</CardTitle>
+                  <CardDescription className="text-sm">
                     This document is waiting for your review and approval
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3 sm:space-y-4 pt-3 sm:pt-6">
                   <div className="space-y-2">
-                    <Label htmlFor="comments">Comments (Optional for approval, Required for rejection)</Label>
+                    <Label htmlFor="comments" className="text-sm">
+                      Comments (Optional for approval, Required for rejection)
+                    </Label>
                     <Textarea
                       id="comments"
                       placeholder="Add your comments or feedback..."
                       value={actionComments}
                       onChange={(e) => setActionComments(e.target.value)}
                       rows={3}
+                      className="text-sm"
                     />
                   </div>
                   
                   <div className="space-y-2">
                     <Button 
                       onClick={handleApprove}
-                      className="w-full bg-green-600 hover:bg-green-700"
+                      className="w-full bg-green-600 hover:bg-green-700 text-sm sm:text-base py-2 sm:py-3"
                       disabled={isProcessing}
                     >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      {isProcessing ? "Processing..." : "Approve Document"}
+                      <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span className="truncate">{isProcessing ? "Processing..." : "Approve Document"}</span>
                     </Button>
                     
                     <Button 
                       onClick={handleReject}
                       variant="destructive"
-                      className="w-full"
+                      className="w-full text-sm sm:text-base py-2 sm:py-3"
                       disabled={isProcessing || !actionComments.trim()}
                     >
-                      <XCircle className="h-4 w-4 mr-2" />
-                      {isProcessing ? "Processing..." : "Reject Document"}
+                      <XCircle className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <span className="truncate">{isProcessing ? "Processing..." : "Reject Document"}</span>
                     </Button>
                   </div>
 
                   <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription className="text-sm">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <AlertDescription className="text-xs sm:text-sm">
                       <strong>Important:</strong> Comments are required when rejecting a document to provide 
                       clear feedback to the originator.
                     </AlertDescription>
@@ -523,22 +542,22 @@ export default function DocumentDetailPage() {
 
             {/* Document Info */}
             <Card>
-              <CardHeader>
-                <CardTitle>Document Information</CardTitle>
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="text-base sm:text-lg">Document Information</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Document ID:</span>
-                  <span className="font-mono">{document.id}</span>
+              <CardContent className="space-y-2 sm:space-y-3 text-xs sm:text-sm pt-3 sm:pt-6">
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-gray-600 flex-shrink-0">Document ID:</span>
+                  <span className="font-mono text-right break-all">{document.id}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Workflow Type:</span>
-                  <span>{document.workflow === "flow" ? "Multi-level Approval" : "Direct Delivery"}</span>
+                <div className="flex justify-between items-start gap-2">
+                  <span className="text-gray-600 flex-shrink-0">Workflow Type:</span>
+                  <span className="text-right">{document.workflow === "flow" ? "Multi-level Approval" : "Direct Delivery"}</span>
                 </div>
                 {document.workflow === "flow" && document.approvalSteps && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Total Approvers:</span>
-                    <span>{document.approvalSteps.length}</span>
+                  <div className="flex justify-between items-start gap-2">
+                    <span className="text-gray-600 flex-shrink-0">Total Approvers:</span>
+                    <span className="text-right">{document.approvalSteps.length}</span>
                   </div>
                 )}
               </CardContent>
