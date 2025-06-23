@@ -22,13 +22,44 @@ export type DocumentStatus =
   | "Delivered"
   | "Completed and Archived"
 
+// Template field types
+export interface TemplateField {
+  name: string
+  type: 'text' | 'textarea' | 'select' | 'date' | 'number' | 'email'
+  label: string
+  required: boolean
+  defaultValue?: string
+  options?: string[] // for select fields
+  placeholder?: string
+  validation?: {
+    min?: number
+    max?: number
+    pattern?: string
+    message?: string
+  }
+}
+
 // Document templates
 export interface DocumentTemplate {
   id: string
   name: string
+  description?: string
   category: string
-  requiredFields: string[]
-  defaultApprovers?: string[]
+  templateFields: TemplateField[]
+  createdBy: string
+  createdAt: string
+  updatedAt: string
+  isPublic: boolean
+  isActive: boolean
+  usageCount: number
+}
+
+export interface CreateTemplateRequest {
+  name: string
+  description?: string
+  category: string
+  templateFields: TemplateField[]
+  isPublic?: boolean
 }
 
 // Approval hierarchy

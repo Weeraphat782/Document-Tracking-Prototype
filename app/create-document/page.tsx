@@ -31,6 +31,20 @@ export default function CreateDocument() {
   const router = useRouter()
   const { toast } = useToast()
 
+  const loadTemplates = async (userId: string) => {
+    try {
+      const templatesData = await EnhancedDocumentService.getDocumentTemplates(userId)
+      setTemplates(templatesData)
+    } catch (error) {
+      console.error("Error loading templates:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load document templates",
+        variant: "destructive",
+      })
+    }
+  }
+
   useEffect(() => {
     const userData = localStorage.getItem("user")
     if (!userData) {
@@ -53,7 +67,7 @@ export default function CreateDocument() {
     }
 
     // Load document templates
-    setTemplates(EnhancedDocumentService.getDocumentTemplates())
+    loadTemplates(parsedUser.email)
   }, [router, toast])
 
   const addApprover = () => {
@@ -88,10 +102,9 @@ export default function CreateDocument() {
   }
 
   const loadDefaultApprovers = () => {
-    const template = getSelectedTemplate()
-    if (template && template.defaultApprovers && template.defaultApprovers.length > 0) {
-      setApprovers(template.defaultApprovers)
-    }
+    // Default approvers functionality removed as templates now use custom fields
+    // Users will need to manually add approvers based on template requirements
+    setApprovers([])
   }
 
   const validateForm = () => {
@@ -285,16 +298,11 @@ export default function CreateDocument() {
                       <p className="text-sm text-blue-600">
                         <strong>Category:</strong> {getSelectedTemplate()?.category}
                       </p>
-                      {getSelectedTemplate()?.defaultApprovers && getSelectedTemplate()!.defaultApprovers!.length > 0 && (
+                      {getSelectedTemplate()?.templateFields && getSelectedTemplate()!.templateFields.length > 0 && (
                         <div className="mt-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={loadDefaultApprovers}
-                          >
-                            Load Default Approvers
-                          </Button>
+                          <p className="text-xs text-gray-600">
+                            {getSelectedTemplate()!.templateFields.length} custom fields available
+                          </p>
                         </div>
                       )}
                     </div>

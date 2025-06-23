@@ -10,6 +10,7 @@ import {
   QRCodeData,
   ScanResult,
   DocumentTemplate,
+  CreateTemplateRequest,
   Notification
 } from './types'
 import { DatabaseService } from './database-service'
@@ -17,8 +18,28 @@ import { DatabaseService } from './database-service'
 export class EnhancedDocumentService {
   
   // Document Templates
-  static getDocumentTemplates(): DocumentTemplate[] {
-    return DatabaseService.getDocumentTemplates()
+  static async getDocumentTemplates(userId?: string): Promise<DocumentTemplate[]> {
+    return await DatabaseService.getDocumentTemplates(userId)
+  }
+
+  // Create template
+  static async createTemplate(request: CreateTemplateRequest, createdBy: string): Promise<DocumentTemplate> {
+    return await DatabaseService.createTemplate(request, createdBy)
+  }
+
+  // Update template
+  static async updateTemplate(template: DocumentTemplate): Promise<void> {
+    return await DatabaseService.updateTemplate(template)
+  }
+
+  // Delete template
+  static async deleteTemplate(templateId: string): Promise<void> {
+    return await DatabaseService.deleteTemplate(templateId)
+  }
+
+  // Delete document
+  static async deleteDocument(documentId: string): Promise<void> {
+    return await DatabaseService.deleteDocument(documentId)
   }
 
   // Create new document

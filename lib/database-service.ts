@@ -10,6 +10,8 @@ import {
   QRCodeData,
   ScanResult,
   DocumentTemplate,
+  TemplateField,
+  CreateTemplateRequest,
   Notification
 } from './types'
 import { supabase, SupabaseService } from './supabase'
@@ -119,7 +121,7 @@ export class DatabaseService {
     approvers?: string[],
     recipient?: string
   ): Promise<Document> {
-    const templates = this.getDocumentTemplates()
+    const templates = await this.getDocumentTemplates()
     const template = templates.find(t => t.id === templateId)
     const docId = this.generateDocumentId()
     const now = new Date().toISOString()
@@ -230,16 +232,57 @@ export class DatabaseService {
     
     if (useSupabase) {
       try {
-        const { data, error } = await supabase
-          .rpc('get_documents_by_role', {
-            user_email: user.email,
-            user_role: user.role
-          })
+        let query = supabase.from('documents').select('*')
+        
+        // Apply role-based filtering using direct queries
+        switch (user.role) {
+          case "admin":
+            query = query.eq('created_by', user.email)
+            break
+          
+          case "mail":
+            query = query.in('status', [
+              'Ready for Pickup',
+              'In Transit',
+              'Approved by Approver. Pending pickup for next step',
+              'Approval Complete. Pending return to Originator'
+            ])
+            break
+          
+          case "approver":
+            // For approvers, we need to check if they have pending approval steps
+            // This is a complex query, so we'll get all flow documents and filter in memory
+            query = query.eq('workflow', 'flow').not('approval_steps', 'is', null)
+            break
+          
+          case "recipient":
+            query = query.eq('workflow', 'drop').eq('recipient', user.email)
+            break
+          
+          default:
+            // Return empty array for unknown roles
+            return []
+        }
+
+        const { data, error } = await query.order('created_at', { ascending: false })
 
         if (error) throw error
 
-        console.log(`✅ Retrieved ${data.length} documents for ${user.role} from Supabase`)
-        return data.map(row => this.mapRowToDocument(row))
+        let documents = data.map(row => this.mapRowToDocument(row))
+        
+        // Additional filtering for approvers (complex logic that needs to be done in memory)
+        if (user.role === "approver") {
+          documents = documents.filter(doc => {
+            if (doc.approvalSteps && doc.approvalSteps.length > 0) {
+              const currentStep = doc.approvalSteps[doc.currentStepIndex || 0]
+              return currentStep?.approverEmail === user.email && currentStep.status === "pending"
+            }
+            return false
+          })
+        }
+
+        console.log(`✅ Retrieved ${documents.length} documents for ${user.role} from Supabase`)
+        return documents
       } catch (error) {
         console.error("❌ Supabase role-based fetch failed, falling back to localStorage:", error)
       }
@@ -411,57 +454,237 @@ export class DatabaseService {
     }
   }
 
-  // Document Templates (static data)
-  static getDocumentTemplates(): DocumentTemplate[] {
+  // Template methods
+  static async getDocumentTemplates(userId?: string): Promise<DocumentTemplate[]> {
+    const useSupabase = await this.checkSupabaseConfig()
+    
+    if (useSupabase) {
+      try {
+        let query = supabase
+          .from('document_templates')
+          .select('*')
+          .eq('is_active', true)
+
+        if (userId) {
+          query = query.or(`is_public.eq.true,created_by.eq.${userId}`)
+        } else {
+          query = query.eq('is_public', true)
+        }
+
+        const { data, error } = await query.order('category', { ascending: true })
+
+        if (error) throw error
+
+        return data.map((row: any) => ({
+          id: row.id,
+          name: row.name,
+          description: row.description || undefined,
+          category: row.category,
+          templateFields: (row.template_fields as any) || [],
+          createdBy: row.created_by,
+          createdAt: row.created_at,
+          updatedAt: row.updated_at,
+          isPublic: row.is_public,
+          isActive: row.is_active,
+          usageCount: row.usage_count
+        }))
+      } catch (error) {
+        console.error("❌ Failed to fetch templates from Supabase:", error)
+        // Fall through to default templates
+      }
+    }
+
+    // Default templates fallback
+    return this.getDefaultTemplates()
+  }
+
+  static async createTemplate(request: CreateTemplateRequest, createdBy: string): Promise<DocumentTemplate> {
+    const templateId = `template-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+    const now = new Date().toISOString()
+
+    const template: DocumentTemplate = {
+      id: templateId,
+      name: request.name,
+      description: request.description,
+      category: request.category,
+      templateFields: request.templateFields,
+      createdBy,
+      createdAt: now,
+      updatedAt: now,
+      isPublic: request.isPublic || false,
+      isActive: true,
+      usageCount: 0
+    }
+
+    const useSupabase = await this.checkSupabaseConfig()
+    
+    if (useSupabase) {
+      try {
+        const { data, error } = await supabase
+          .from('document_templates')
+          .insert([{
+            id: template.id,
+            name: template.name,
+            description: template.description,
+            category: template.category,
+            template_fields: template.templateFields as any,
+            created_by: template.createdBy,
+            is_public: template.isPublic,
+            is_active: template.isActive,
+            usage_count: template.usageCount
+          }])
+          .select()
+          .single()
+
+        if (error) throw error
+
+        console.log("✅ Template saved to Supabase:", template.id)
+        return template
+      } catch (error) {
+        console.error("❌ Supabase template save failed:", error)
+        throw error
+      }
+    }
+
+    // For localStorage, we'd need to implement template storage
+    console.log("✅ Template created (localStorage not implemented for templates):", template.id)
+    return template
+  }
+
+  static async updateTemplate(template: DocumentTemplate): Promise<void> {
+    const useSupabase = await this.checkSupabaseConfig()
+    
+    if (useSupabase) {
+      try {
+        const { error } = await supabase
+          .from('document_templates')
+          .update({
+            name: template.name,
+            description: template.description,
+            category: template.category,
+            template_fields: template.templateFields as any,
+            is_public: template.isPublic,
+            is_active: template.isActive,
+            usage_count: template.usageCount,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', template.id)
+
+        if (error) throw error
+
+        console.log("✅ Template updated in Supabase:", template.id)
+      } catch (error) {
+        console.error("❌ Supabase template update failed:", error)
+        throw error
+      }
+    }
+  }
+
+  static async deleteTemplate(templateId: string): Promise<void> {
+    const useSupabase = await this.checkSupabaseConfig()
+    
+    if (useSupabase) {
+      try {
+        const { error } = await supabase
+          .from('document_templates')
+          .delete()
+          .eq('id', templateId)
+
+        if (error) throw error
+
+        console.log("✅ Template deleted from Supabase:", templateId)
+      } catch (error) {
+        console.error("❌ Supabase template deletion failed:", error)
+        throw error
+      }
+    }
+  }
+
+  static async deleteDocument(documentId: string): Promise<void> {
+    const useSupabase = await this.checkSupabaseConfig()
+    
+    if (useSupabase) {
+      try {
+        const { error } = await supabase
+          .from('documents')
+          .delete()
+          .eq('id', documentId)
+
+        if (error) throw error
+
+        console.log("✅ Document deleted from Supabase:", documentId)
+      } catch (error) {
+        console.error("❌ Supabase document deletion failed:", error)
+        throw error
+      }
+    } else {
+      // localStorage fallback
+      const documents = this.getFromLocalStorage()
+      const filteredDocuments = documents.filter(doc => doc.id !== documentId)
+      localStorage.setItem("documents", JSON.stringify(filteredDocuments))
+      console.log("✅ Document deleted from localStorage:", documentId)
+    }
+  }
+
+  private static getDefaultTemplates(): DocumentTemplate[] {
+    const now = new Date().toISOString()
     return [
       {
-        id: "purchase-request",
-        name: "Purchase Request",
-        category: "Financial",
-        requiredFields: ["amount", "vendor", "justification"],
-        defaultApprovers: ["manager@company.com", "finance@company.com"]
+        id: "financial-template",
+        name: "Financial Document",
+        description: "Template for financial documents and transactions",
+        category: "Finance",
+        templateFields: [
+          { name: "amount", type: "number", label: "Amount", required: true, defaultValue: "" },
+          { name: "currency", type: "select", label: "Currency", required: true, options: ["USD", "EUR", "THB"], defaultValue: "USD" },
+          { name: "purpose", type: "textarea", label: "Purpose", required: true, defaultValue: "" },
+          { name: "requestedBy", type: "text", label: "Requested By", required: true, defaultValue: "" },
+          { name: "dueDate", type: "date", label: "Due Date", required: false, defaultValue: "" }
+        ],
+        createdBy: "admin@company.com",
+        createdAt: now,
+        updatedAt: now,
+        isPublic: true,
+        isActive: true,
+        usageCount: 0
       },
       {
-        id: "leave-form",
-        name: "Leave Form",
-        category: "HR",
-        requiredFields: ["startDate", "endDate", "reason"],
-        defaultApprovers: ["manager@company.com", "hr@company.com"]
+        id: "hr-template",
+        name: "HR Document",
+        description: "Template for human resources documents",
+        category: "Human Resources",
+        templateFields: [
+          { name: "employeeId", type: "text", label: "Employee ID", required: true, defaultValue: "" },
+          { name: "employeeName", type: "text", label: "Employee Name", required: true, defaultValue: "" },
+          { name: "department", type: "select", label: "Department", required: true, options: ["HR", "Finance", "IT", "Operations"], defaultValue: "HR" },
+          { name: "documentType", type: "select", label: "Document Type", required: true, options: ["Leave Request", "Performance Review", "Contract Amendment"], defaultValue: "Leave Request" },
+          { name: "effectiveDate", type: "date", label: "Effective Date", required: true, defaultValue: "" }
+        ],
+        createdBy: "admin@company.com",
+        createdAt: now,
+        updatedAt: now,
+        isPublic: true,
+        isActive: true,
+        usageCount: 0
       },
       {
-        id: "expense-report",
-        name: "Expense Report",
-        category: "Financial",
-        requiredFields: ["totalAmount", "receipts"],
-        defaultApprovers: ["manager@company.com", "finance@company.com"]
-      },
-      {
-        id: "contract-review",
-        name: "Contract Review",
+        id: "legal-template",
+        name: "Legal Document",
+        description: "Template for legal documents and contracts",
         category: "Legal",
-        requiredFields: ["contractType", "value"],
-        defaultApprovers: ["legal@company.com", "ceo@company.com"]
-      },
-      {
-        id: "budget-approval",
-        name: "Budget Approval",
-        category: "Financial",
-        requiredFields: ["budgetPeriod", "amount"],
-        defaultApprovers: ["manager@company.com", "cfo@company.com"]
-      },
-      {
-        id: "policy-document",
-        name: "Policy Document",
-        category: "General",
-        requiredFields: ["policyArea", "effectiveDate"],
-        defaultApprovers: ["hr@company.com", "legal@company.com"]
-      },
-      {
-        id: "monthly-report",
-        name: "Monthly Report",
-        category: "Reporting",
-        requiredFields: ["reportPeriod", "department"],
-        defaultApprovers: []
+        templateFields: [
+          { name: "contractType", type: "select", label: "Contract Type", required: true, options: ["NDA", "Service Agreement", "Employment Contract"], defaultValue: "NDA" },
+          { name: "partyA", type: "text", label: "Party A", required: true, defaultValue: "" },
+          { name: "partyB", type: "text", label: "Party B", required: true, defaultValue: "" },
+          { name: "jurisdiction", type: "text", label: "Jurisdiction", required: true, defaultValue: "" },
+          { name: "expirationDate", type: "date", label: "Expiration Date", required: false, defaultValue: "" }
+        ],
+        createdBy: "admin@company.com",
+        createdAt: now,
+        updatedAt: now,
+        isPublic: true,
+        isActive: true,
+        usageCount: 0
       }
     ]
   }

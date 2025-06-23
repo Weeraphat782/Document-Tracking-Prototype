@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { FileText, Plus, QrCode, Clock, CheckCircle, XCircle, Truck, Package, Users, User, AlertCircle, History } from "lucide-react"
+import { FileText, Plus, QrCode, Clock, CheckCircle, XCircle, Truck, Package, Users, User, AlertCircle, History, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
@@ -201,7 +201,7 @@ export default function Dashboard() {
       case "admin":
         return (
           <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <Link href="/create-document">
                 <Card className="cursor-pointer hover:shadow-md transition-shadow">
                   <CardContent className="flex items-center p-4 sm:p-6">
@@ -209,6 +209,17 @@ export default function Dashboard() {
                     <div className="min-w-0">
                       <h3 className="font-semibold text-sm sm:text-base">Create New Document</h3>
                       <p className="text-xs sm:text-sm text-gray-600">Start a new workflow</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+              <Link href="/templates">
+                <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                  <CardContent className="flex items-center p-4 sm:p-6">
+                    <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 mr-3 sm:mr-4 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-sm sm:text-base">Manage Templates</h3>
+                      <p className="text-xs sm:text-sm text-gray-600">Create and edit document templates</p>
                     </div>
                   </CardContent>
                 </Card>
@@ -371,6 +382,16 @@ export default function Dashboard() {
                   Closed
                 </Button>
               )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => handleDeleteDocument(document.id)} 
+                className="w-full sm:w-auto text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Delete</span>
+                <span className="sm:hidden">Del</span>
+              </Button>
             </div>
           )
         }
@@ -447,6 +468,52 @@ export default function Dashboard() {
         title: "Error",
         description: "An unexpected error occurred while closing the document",
         variant: "destructive"
+      })
+    }
+  }
+
+  const handleDeleteDocument = async (documentId: string) => {
+    if (!user) return
+
+    try {
+      const document = await EnhancedDocumentService.getDocumentById(documentId)
+      if (!document) {
+        toast({
+          title: "Error",
+          description: "Document not found",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Only allow deletion if user is admin and document creator
+      if (user.role !== "admin" || document.createdBy !== user.email) {
+        toast({
+          title: "Cannot Delete Document",
+          description: "Only the document creator (admin) can delete documents",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Confirm deletion
+      if (!confirm(`Are you sure you want to delete "${document.title}"? This action cannot be undone.`)) {
+        return
+      }
+
+      await EnhancedDocumentService.deleteDocument(documentId)
+      await loadDocuments(user)
+      
+      toast({
+        title: "Document Deleted",
+        description: "The document has been permanently deleted",
+      })
+    } catch (error) {
+      console.error("Error deleting document:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete document",
+        variant: "destructive",
       })
     }
   }
