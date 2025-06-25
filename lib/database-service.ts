@@ -12,7 +12,9 @@ import {
   DocumentTemplate,
   TemplateField,
   CreateTemplateRequest,
-  Notification
+  Notification,
+  ApprovalMode,
+  DocumentRevision
 } from './types'
 import { supabase, SupabaseService } from './supabase'
 import { Database } from './database.types'
@@ -84,6 +86,8 @@ export class DatabaseService {
       currentStepIndex: row.current_step_index || undefined,
       recipient: row.recipient || undefined,
       rejectionReason: row.rejection_reason || undefined,
+      approvalMode: row.approval_mode as ApprovalMode || undefined,
+      revision: (row as any).revision_data as unknown as DocumentRevision || undefined,
       qrData: row.qr_data as unknown as QRCodeData,
       approvalSteps: row.approval_steps as unknown as ApprovalStep[] || undefined,
       actionHistory: row.action_history as unknown as DocumentAction[]
@@ -105,6 +109,8 @@ export class DatabaseService {
       current_step_index: document.currentStepIndex,
       recipient: document.recipient,
       rejection_reason: document.rejectionReason,
+      approval_mode: document.approvalMode,
+      revision_data: document.revision as unknown as Database['public']['Tables']['documents']['Insert']['revision_data'],
       qr_data: document.qrData as unknown as Database['public']['Tables']['documents']['Insert']['qr_data'],
       approval_steps: document.approvalSteps as unknown as Database['public']['Tables']['documents']['Insert']['approval_steps'],
       action_history: document.actionHistory as unknown as Database['public']['Tables']['documents']['Insert']['action_history']
@@ -119,19 +125,30 @@ export class DatabaseService {
     createdBy: string,
     description?: string,
     approvers?: string[],
-    recipient?: string
+    recipient?: string,
+    approvalMode?: ApprovalMode
   ): Promise<Document> {
     const templates = await this.getDocumentTemplates()
     const template = templates.find(t => t.id === templateId)
     const docId = this.generateDocumentId()
     const now = new Date().toISOString()
 
-    // Create approval steps for flow workflow
+    // Get creator's drop off location
+    const creator = await this.getUserByEmail(createdBy)
+    const createdByDropOffLocation = creator?.dropOffLocation
+
+    // Create approval steps for flow workflow with drop off locations
     const approvalSteps: ApprovalStep[] = workflow === "flow" && approvers ? 
-      approvers.map((email, index) => ({
-        order: index + 1,
-        approverEmail: email,
-        status: "pending" as const
+      await Promise.all(approvers.map(async (email, index) => {
+        const approver = await this.getUserByEmail(email)
+        return {
+          order: index + 1,
+          approverEmail: email,
+          approverName: approver?.name,
+          department: approver?.department,
+          dropOffLocation: approver?.dropOffLocation,
+          status: "pending" as const
+        }
       })) : []
 
     // Generate QR code data
@@ -165,9 +182,11 @@ export class DatabaseService {
       status: "Ready for Pickup",
       createdAt: now,
       createdBy,
+      createdByDropOffLocation,
       approvalSteps,
       currentStepIndex: 0,
       recipient: workflow === "drop" ? recipient : undefined,
+      approvalMode: workflow === "flow" ? (approvalMode || "sequential") : undefined,
       qrData,
       actionHistory: [initialAction]
     }
@@ -241,12 +260,9 @@ export class DatabaseService {
             break
           
           case "mail":
-            query = query.in('status', [
-              'Ready for Pickup',
-              'In Transit',
-              'Approved by Approver. Pending pickup for next step',
-              'Approval Complete. Pending return to Originator'
-            ])
+            // For mail controllers, we need to get all documents and filter them in memory
+            // because we need to check actionHistory which is complex for SQL
+            query = supabase.from('documents').select('*')
             break
           
           case "approver":
@@ -270,15 +286,21 @@ export class DatabaseService {
 
         let documents = data.map(row => this.mapRowToDocument(row))
         
-        // Additional filtering for approvers (complex logic that needs to be done in memory)
+        // Additional filtering for complex roles that need memory-based filtering
         if (user.role === "approver") {
           documents = documents.filter(doc => {
             if (doc.approvalSteps && doc.approvalSteps.length > 0) {
-              const currentStep = doc.approvalSteps[doc.currentStepIndex || 0]
-              return currentStep?.approverEmail === user.email && currentStep.status === "pending"
+              // Check if user is an approver in any pending step
+              const userSteps = doc.approvalSteps.filter(step => 
+                step.approverEmail === user.email && step.status === "pending"
+              )
+              return userSteps.length > 0
             }
             return false
           })
+        } else if (user.role === "mail") {
+          // Apply the same filtering logic as localStorage fallback
+          documents = this.filterDocumentsByRole(documents, user)
         }
 
         console.log(`✅ Retrieved ${documents.length} documents for ${user.role} from Supabase`)
@@ -428,12 +450,23 @@ export class DatabaseService {
         return documents.filter(doc => doc.createdBy === user.email)
       
       case "mail":
-        return documents.filter(doc => 
-          doc.status === "Ready for Pickup" ||
-          doc.status === "In Transit" ||
-          doc.status === "Approved by Approver. Pending pickup for next step" ||
-          doc.status === "Approval Complete. Pending return to Originator"
-        )
+        // Mail controllers should see documents they've interacted with OR documents that need mail controller actions
+        return documents.filter(doc => {
+          // Documents that need mail controller actions (active)
+          const needsMailAction = 
+            doc.status === "Ready for Pickup" ||
+            doc.status === "In Transit" ||
+            doc.status === "Approved by Approver. Pending pickup for next step" ||
+            doc.status === "Approval Complete. Pending return to Originator"
+          
+          // Documents that mail controller has handled before (for history)
+          const hasMailHistory = doc.actionHistory.some(action => 
+            action.performedBy === user.email && 
+            ["pickup", "deliver"].includes(action.action)
+          )
+          
+          return needsMailAction || hasMailHistory
+        })
       
       case "approver":
         return documents.filter(doc => {
@@ -705,5 +738,151 @@ export class DatabaseService {
       documentsCount: documents.length,
       storageType: useSupabase ? 'supabase' : 'localStorage'
     }
+  }
+
+  // USER MANAGEMENT FUNCTIONS
+
+  // Get all users
+  static async getAllUsers(): Promise<User[]> {
+    const useSupabase = await this.checkSupabaseConfig()
+    
+    if (useSupabase) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .order('email')
+
+        if (error) throw error
+
+        return data.map(user => ({
+          email: user.email,
+          role: user.role as UserRole,
+          dropOffLocation: user.drop_off_location || undefined
+        }))
+      } catch (error) {
+        console.error("Failed to get users from Supabase:", error)
+        // Fall through to localStorage
+      }
+    }
+
+    // localStorage fallback
+    return this.getUsersFromLocalStorage()
+  }
+
+  // Get user by email
+  static async getUserByEmail(email: string): Promise<User | null> {
+    const users = await this.getAllUsers()
+    return users.find(user => user.email === email) || null
+  }
+
+  // Get users by role
+  static async getUsersByRole(role: UserRole): Promise<User[]> {
+    const users = await this.getAllUsers()
+    return users.filter(user => user.role === role)
+  }
+
+  // Update user drop off location
+  static async updateUserDropOffLocation(email: string, dropOffLocation: string): Promise<void> {
+    const useSupabase = await this.checkSupabaseConfig()
+    
+    if (useSupabase) {
+      try {
+        const { error } = await supabase
+          .from('users')
+          .update({ drop_off_location: dropOffLocation })
+          .eq('email', email)
+
+        if (error) throw error
+
+        console.log("✅ User drop off location updated in Supabase:", email)
+        return
+      } catch (error) {
+        console.error("❌ Supabase update failed, falling back to localStorage:", error)
+        // Fall through to localStorage
+      }
+    }
+
+    // localStorage fallback
+    this.updateUserInLocalStorage(email, { dropOffLocation })
+  }
+
+  // Save revision document directly
+  static async saveRevisionDocument(document: Document): Promise<void> {
+    const useSupabase = await this.checkSupabaseConfig()
+    
+    if (useSupabase) {
+      try {
+        const row = this.mapDocumentToRow(document)
+        const { error } = await supabase
+          .from('documents')
+          .insert([row])
+
+        if (error) throw error
+        console.log("✅ Revision document saved to Supabase:", document.id)
+        return
+      } catch (error) {
+        console.error("❌ Supabase save failed, falling back to localStorage:", error)
+      }
+    }
+
+    // localStorage fallback
+    this.saveToLocalStorage(document)
+    console.log("✅ Revision document saved to localStorage:", document.id)
+  }
+
+  // Get users from localStorage
+  private static getUsersFromLocalStorage(): User[] {
+    const usersData = localStorage.getItem('document-tracker-users')
+    if (!usersData) {
+      // Return default users if none exist
+      const defaultUsers = this.getDefaultUsers()
+      localStorage.setItem('document-tracker-users', JSON.stringify(defaultUsers))
+      return defaultUsers
+    }
+    
+    try {
+      return JSON.parse(usersData)
+    } catch (error) {
+      console.error('Error parsing users from localStorage:', error)
+      return this.getDefaultUsers()
+    }
+  }
+
+  // Update user in localStorage
+  private static updateUserInLocalStorage(email: string, updates: Partial<User>): void {
+    const users = this.getUsersFromLocalStorage()
+    const userIndex = users.findIndex(user => user.email === email)
+    
+    if (userIndex !== -1) {
+      users[userIndex] = { ...users[userIndex], ...updates }
+      localStorage.setItem('document-tracker-users', JSON.stringify(users))
+    }
+  }
+
+  // Get default users
+  private static getDefaultUsers(): User[] {
+    return [
+      {
+        email: 'admin@company.com',
+        role: 'admin',
+        dropOffLocation: 'Admin Office - Floor 12'
+      },
+      {
+        email: 'mail@company.com',
+        role: 'mail',
+        dropOffLocation: 'Mail Room - Ground Floor'
+      },
+      {
+        email: 'manager@company.com',
+        role: 'approver',
+        dropOffLocation: 'Manager Office - Floor 8'
+      },
+      {
+        email: 'recipient@company.com',
+        role: 'recipient',
+        dropOffLocation: 'General Office - Floor 5'
+      }
+    ]
   }
 } 

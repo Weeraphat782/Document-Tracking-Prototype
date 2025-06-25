@@ -187,6 +187,58 @@ export default function DocumentDetailPage() {
     return currentStep?.approverEmail === user.email && currentStep.status === "pending"
   }
 
+  const getLocationForAction = (action: any) => {
+    if (!action.action || !document) return null
+
+    // For pickup and deliver actions, show relevant location
+    if (action.action === "pickup") {
+      // Pickup is always from creator initially, or from approver after approval
+      if (action.newStatus === "In Transit") {
+        // First pickup from creator
+        return document.createdByDropOffLocation || "Creator location not set"
+      } else {
+        // Pickup from approver after approval
+        if (document.workflow === "flow" && document.approvalSteps) {
+          // Find the approver who just approved based on action history
+          const approvedActions = document.actionHistory
+            .filter(a => a.action === "approve" && new Date(a.performedAt) < new Date(action.performedAt))
+            .sort((a, b) => new Date(b.performedAt).getTime() - new Date(a.performedAt).getTime())
+          
+          if (approvedActions.length > 0) {
+            const lastApprover = approvedActions[0].performedBy
+            const approverStep = document.approvalSteps.find(step => step.approverEmail === lastApprover)
+            return approverStep?.dropOffLocation || "Approver location not set"
+          }
+        }
+        return document.createdByDropOffLocation || "Location not set"
+      }
+    }
+    
+    if (action.action === "deliver") {
+      // Deliver to approver or back to creator
+      if (document.workflow === "flow" && document.approvalSteps) {
+        if (action.newStatus === "With Approver for Review") {
+          // Delivering to an approver for review
+          // Find which approver based on the workflow step at that time
+          const deliveryActions = document.actionHistory
+            .filter(a => a.action === "deliver" && a.newStatus === "With Approver for Review")
+          const deliveryIndex = deliveryActions.findIndex(a => a.id === action.id)
+          
+          if (deliveryIndex >= 0 && deliveryIndex < document.approvalSteps.length) {
+            return document.approvalSteps[deliveryIndex].dropOffLocation || "Approver location not set"
+          }
+        } else if (action.newStatus === "Delivered") {
+          // Final delivery back to creator
+          return document.createdByDropOffLocation || "Creator location not set"
+        }
+      } else if (document.workflow === "drop" && document.recipient) {
+        return "Recipient location (direct delivery)"
+      }
+    }
+
+    return null
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -239,11 +291,8 @@ export default function DocumentDetailPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-          
-          {/* Main Document Information */}
-          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+      <main className="max-w-4xl mx-auto px-3 sm:px-4 lg:px-8 py-4 sm:py-8">
+        <div className="space-y-4 sm:space-y-6">
             
             {/* Document Header */}
             <Card>
@@ -333,9 +382,25 @@ export default function DocumentDetailPage() {
                   <CardTitle className="flex items-center text-base sm:text-lg">
                     <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                     Approval Hierarchy
+                    {document.approvalMode && (
+                      <Badge 
+                        variant="outline" 
+                        className={`ml-2 text-xs ${
+                          document.approvalMode === "sequential" 
+                            ? "bg-blue-50 text-blue-700 border-blue-200" 
+                            : "bg-green-50 text-green-700 border-green-200"
+                        }`}
+                      >
+                        {document.approvalMode === "sequential" ? "Sequential" : "Flexible"}
+                      </Badge>
+                    )}
                   </CardTitle>
                   <CardDescription className="text-sm">
-                    Document approval progress and hierarchy
+                    {document.approvalMode === "sequential" 
+                      ? "Approvers must review in order" 
+                      : document.approvalMode === "flexible"
+                      ? "Approvers can review in any order"
+                      : "Document approval progress and hierarchy"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-3 sm:pt-6">
@@ -359,6 +424,12 @@ export default function DocumentDetailPage() {
                           </Badge>
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-xs sm:text-sm truncate">{step.approverEmail}</p>
+                            {step.dropOffLocation && (
+                              <p className="text-xs text-blue-600 mt-1 flex items-center">
+                                <Package className="h-3 w-3 mr-1 flex-shrink-0" />
+                                <span className="truncate">{step.dropOffLocation}</span>
+                              </p>
+                            )}
                             {step.timestamp && (
                               <p className="text-xs text-gray-500 mt-1">
                                 {step.status === "approved" ? "Approved" : "Rejected"} on{" "}
@@ -368,7 +439,16 @@ export default function DocumentDetailPage() {
                               </p>
                             )}
                             {step.comments && (
-                              <p className="text-xs text-gray-600 mt-1 italic break-words">"{step.comments}"</p>
+                              <p className={`text-xs mt-1 italic break-words ${
+                                step.comments.includes("Preserved from revision") 
+                                  ? "text-blue-600 font-medium" 
+                                  : "text-gray-600"
+                              }`}>
+                                "{step.comments}"
+                                {step.comments.includes("Preserved from revision") && (
+                                  <span className="ml-1">🔄</span>
+                                )}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -389,6 +469,200 @@ export default function DocumentDetailPage() {
               </Card>
             )}
 
+            {/* Drop Off Locations */}
+            <Card className="bg-orange-50 border-orange-200">
+              <CardHeader className="pb-3 sm:pb-6">
+                <CardTitle className="flex items-center text-base sm:text-lg text-orange-800">
+                  <Package className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                  Drop Off Locations
+                </CardTitle>
+                <CardDescription className="text-sm text-orange-700">
+                  Delivery locations for mail controller reference
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-3 sm:pt-6">
+                <div className="space-y-3">
+                  {/* Creator Location */}
+                  <div className="flex items-start space-x-3 p-3 bg-white rounded-lg border border-orange-200">
+                    <div className="flex-shrink-0">
+                      <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                        Creator
+                      </Badge>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm text-orange-900">{document.createdBy}</p>
+                      <p className="text-sm text-orange-700 mt-1">
+                        {document.createdByDropOffLocation || "Location not set"}
+                      </p>
+                      <p className="text-xs text-orange-600 mt-1">
+                        📍 For document pickup and final return
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Approver Locations (for Flow workflow) */}
+                  {document.workflow === "flow" && document.approvalSteps && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm text-orange-800">Approver Locations:</h4>
+                      {document.approvalSteps.map((step, index) => (
+                        <div 
+                          key={step.approverEmail}
+                          className={`flex items-start space-x-3 p-3 bg-white rounded-lg border ${
+                            index === document.currentStepIndex 
+                              ? 'border-blue-300 bg-blue-50' 
+                              : 'border-orange-200'
+                          }`}
+                        >
+                          <div className="flex-shrink-0">
+                            <Badge 
+                              variant={index === document.currentStepIndex ? "default" : "outline"}
+                              className={`${
+                                index === document.currentStepIndex 
+                                  ? 'bg-blue-600 text-white' 
+                                  : 'bg-orange-100 text-orange-800 border-orange-300'
+                              }`}
+                            >
+                              {index + 1}
+                            </Badge>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className={`font-medium text-sm ${
+                              index === document.currentStepIndex ? 'text-blue-900' : 'text-orange-900'
+                            }`}>
+                              {step.approverEmail}
+                            </p>
+                            <p className={`text-sm mt-1 ${
+                              index === document.currentStepIndex ? 'text-blue-700' : 'text-orange-700'
+                            }`}>
+                              {step.dropOffLocation || "Location not set"}
+                            </p>
+                            {((document.approvalMode === "sequential" && index === document.currentStepIndex) ||
+                              (document.approvalMode === "flexible" && step.status === "pending")) && (
+                              <p className="text-xs text-blue-600 mt-1 font-medium">
+                                {document.approvalMode === "flexible" 
+                                  ? "📍 Available for review" 
+                                  : "🎯 Current delivery destination"}
+                              </p>
+                            )}
+                            {step.status === "approved" && (
+                              <p className="text-xs text-green-600 mt-1">
+                                ✅ Completed
+                              </p>
+                            )}
+                            {step.status === "rejected" && (
+                              <p className="text-xs text-red-600 mt-1">
+                                ❌ Rejected
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Recipient Location (for Drop workflow) */}
+                  {document.workflow === "drop" && document.recipient && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm text-orange-800">Recipient Location:</h4>
+                      <div className="flex items-start space-x-3 p-3 bg-white rounded-lg border border-orange-200">
+                        <div className="flex-shrink-0">
+                          <Badge variant="outline" className="bg-orange-100 text-orange-800 border-orange-300">
+                            Recipient
+                          </Badge>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm text-orange-900">{document.recipient}</p>
+                          <p className="text-sm text-orange-700 mt-1">
+                            Location not available for direct delivery
+                          </p>
+                          <p className="text-xs text-orange-600 mt-1">
+                            📍 For direct document delivery
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <Alert className="bg-yellow-50 border-yellow-200">
+                    <AlertCircle className="h-4 w-4 text-yellow-600" />
+                    <AlertDescription className="text-xs text-yellow-800">
+                      <strong>Note for Mail Controller:</strong> These are default locations. 
+                      You can change the drop off location when scanning the document if needed.
+                    </AlertDescription>
+                  </Alert>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Revision History */}
+            {document.revision && (
+              <Card className="bg-blue-50 border-blue-200">
+                <CardHeader className="pb-3 sm:pb-6">
+                  <CardTitle className="flex items-center text-base sm:text-lg text-blue-800">
+                    <FileText className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                    Revision Information
+                  </CardTitle>
+                  <CardDescription className="text-sm text-blue-700">
+                    This document is revision #{document.revision.revisionNumber} of the original document
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-3 sm:pt-6">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-medium text-blue-800">Original Document</Label>
+                        <p className="text-sm text-blue-700 mt-1">{document.revision.originalDocumentId}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-blue-800">Revision Number</Label>
+                        <p className="text-sm text-blue-700 mt-1">#{document.revision.revisionNumber}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-blue-800">Revised By</Label>
+                        <p className="text-sm text-blue-700 mt-1">{document.revision.revisedBy}</p>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium text-blue-800">Revised At</Label>
+                        <p className="text-sm text-blue-700 mt-1">
+                          {new Date(document.revision.revisedAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <Label className="text-sm font-medium text-blue-800">Revision Reason</Label>
+                      <p className="text-sm text-blue-700 mt-1 p-3 bg-white rounded border border-blue-200">
+                        {document.revision.revisionReason}
+                      </p>
+                    </div>
+
+                    {/* Preserved Approvals */}
+                    {document.revision.preservedApprovals.length > 0 && (
+                      <div>
+                        <Label className="text-sm font-medium text-blue-800">Preserved Approvals</Label>
+                        <div className="mt-2 space-y-2">
+                          {document.revision.preservedApprovals.map((approval, index) => (
+                            <div key={index} className="flex items-center space-x-3 p-3 bg-white rounded border border-blue-200">
+                              <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-blue-900">{approval.approverEmail}</p>
+                                <p className="text-xs text-blue-700">
+                                  Approved on {new Date(approval.approvedAt).toLocaleString()}
+                                </p>
+                                {approval.comments && (
+                                  <p className="text-xs text-blue-600 italic mt-1">"{approval.comments}"</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Action History */}
             <Card>
               <CardHeader className="pb-3 sm:pb-6">
@@ -402,167 +676,47 @@ export default function DocumentDetailPage() {
               </CardHeader>
               <CardContent className="pt-3 sm:pt-6">
                 <div className="space-y-2 sm:space-y-3">
-                  {document.actionHistory.map((action) => (
-                    <div key={action.id} className="flex items-start space-x-2 sm:space-x-3 p-3 border rounded-lg">
-                      <div className="mt-0.5 flex-shrink-0">
-                        {getActionIcon(action.action)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                          <p className="font-medium text-xs sm:text-sm capitalize">{action.action}</p>
-                          <p className="text-xs text-gray-500">
-                            {new Date(action.performedAt).toLocaleString()}
-                          </p>
+                  {document.actionHistory.map((action) => {
+                    const location = getLocationForAction(action)
+                    return (
+                      <div key={action.id} className="flex items-start space-x-2 sm:space-x-3 p-3 border rounded-lg">
+                        <div className="mt-0.5 flex-shrink-0">
+                          {getActionIcon(action.action)}
                         </div>
-                        <p className="text-xs sm:text-sm text-gray-600 truncate">
-                          Performed by {action.performedBy}
-                        </p>
-                        {action.previousStatus && (
-                          <p className="text-xs text-gray-500 break-words">
-                            Status changed from "{action.previousStatus}" to "{action.newStatus}"
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
+                            <p className="font-medium text-xs sm:text-sm capitalize">{action.action}</p>
+                            <p className="text-xs text-gray-500">
+                              {new Date(action.performedAt).toLocaleString()}
+                            </p>
+                          </div>
+                          <p className="text-xs sm:text-sm text-gray-600 truncate">
+                            Performed by {action.performedBy}
                           </p>
-                        )}
-                        {action.comments && (
-                          <p className="text-xs text-gray-600 mt-1 italic break-words">"{action.comments}"</p>
-                        )}
+                          {location && (
+                            <p className="text-xs text-blue-600 mt-1 flex items-center">
+                              <Package className="h-3 w-3 mr-1 flex-shrink-0" />
+                              <span className="truncate">
+                                {action.action === "pickup" ? "Picked up from: " : "Delivered to: "}
+                                {location}
+                              </span>
+                            </p>
+                          )}
+                          {action.previousStatus && (
+                            <p className="text-xs text-gray-500 break-words">
+                              Status changed from "{action.previousStatus}" to "{action.newStatus}"
+                            </p>
+                          )}
+                          {action.comments && (
+                            <p className="text-xs text-gray-600 mt-1 italic break-words">"{action.comments}"</p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
-          </div>
-
-          {/* Actions Panel */}
-          <div className="space-y-4 sm:space-y-6">
-            
-            {/* Current Status */}
-            <Card>
-              <CardHeader className="pb-3 sm:pb-6">
-                <CardTitle className="text-base sm:text-lg">Current Status</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 sm:space-y-4 pt-3 sm:pt-6">
-                <div className="text-center">
-                  <Badge className={`${getStatusColor(document.status)} text-sm sm:text-base px-2 sm:px-3 py-1 sm:py-2`}>
-                    <span className="flex items-center">
-                      {getStatusIcon(document.status)}
-                      <span className="ml-1 sm:ml-2 break-words max-w-[200px]">{document.status}</span>
-                    </span>
-                  </Badge>
-                </div>
-                
-                {document.workflow === "flow" && document.approvalSteps && (
-                  <div className="text-center">
-                    <p className="text-xs sm:text-sm text-gray-600">
-                      Progress: {document.approvalSteps.filter(s => s.status === "approved").length} of{" "}
-                      {document.approvalSteps.length} approvals completed
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader className="pb-3 sm:pb-6">
-                <CardTitle className="text-base sm:text-lg">Quick Actions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 sm:space-y-3 pt-3 sm:pt-6">
-                <Link href="/scan-qr">
-                  <Button variant="outline" className="w-full text-sm sm:text-base py-2 sm:py-3">
-                    <QrCode className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span className="truncate">Scan QR Code</span>
-                  </Button>
-                </Link>
-                
-                <Link href={`/cover-sheet/${document.id}`}>
-                  <Button variant="outline" className="w-full text-sm sm:text-base py-2 sm:py-3">
-                    <FileText className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <span className="truncate">View Cover Sheet</span>
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-
-            {/* Approval Actions (for approvers) */}
-            {canUserApprove() && (
-              <Card>
-                <CardHeader className="pb-3 sm:pb-6">
-                  <CardTitle className="text-orange-600 text-base sm:text-lg">Pending Your Approval</CardTitle>
-                  <CardDescription className="text-sm">
-                    This document is waiting for your review and approval
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3 sm:space-y-4 pt-3 sm:pt-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="comments" className="text-sm">
-                      Comments (Optional for approval, Required for rejection)
-                    </Label>
-                    <Textarea
-                      id="comments"
-                      placeholder="Add your comments or feedback..."
-                      value={actionComments}
-                      onChange={(e) => setActionComments(e.target.value)}
-                      rows={3}
-                      className="text-sm"
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Button 
-                      onClick={handleApprove}
-                      className="w-full bg-green-600 hover:bg-green-700 text-sm sm:text-base py-2 sm:py-3"
-                      disabled={isProcessing}
-                    >
-                      <CheckCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span className="truncate">{isProcessing ? "Processing..." : "Approve Document"}</span>
-                    </Button>
-                    
-                    <Button 
-                      onClick={handleReject}
-                      variant="destructive"
-                      className="w-full text-sm sm:text-base py-2 sm:py-3"
-                      disabled={isProcessing || !actionComments.trim()}
-                    >
-                      <XCircle className="h-4 w-4 mr-2 flex-shrink-0" />
-                      <span className="truncate">{isProcessing ? "Processing..." : "Reject Document"}</span>
-                    </Button>
-                  </div>
-
-                  <Alert>
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    <AlertDescription className="text-xs sm:text-sm">
-                      <strong>Important:</strong> Comments are required when rejecting a document to provide 
-                      clear feedback to the originator.
-                    </AlertDescription>
-                  </Alert>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Document Info */}
-            <Card>
-              <CardHeader className="pb-3 sm:pb-6">
-                <CardTitle className="text-base sm:text-lg">Document Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 sm:space-y-3 text-xs sm:text-sm pt-3 sm:pt-6">
-                <div className="flex justify-between items-start gap-2">
-                  <span className="text-gray-600 flex-shrink-0">Document ID:</span>
-                  <span className="font-mono text-right break-all">{document.id}</span>
-                </div>
-                <div className="flex justify-between items-start gap-2">
-                  <span className="text-gray-600 flex-shrink-0">Workflow Type:</span>
-                  <span className="text-right">{document.workflow === "flow" ? "Multi-level Approval" : "Direct Delivery"}</span>
-                </div>
-                {document.workflow === "flow" && document.approvalSteps && (
-                  <div className="flex justify-between items-start gap-2">
-                    <span className="text-gray-600 flex-shrink-0">Total Approvers:</span>
-                    <span className="text-right">{document.approvalSteps.length}</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </main>
     </div>

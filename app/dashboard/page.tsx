@@ -4,19 +4,31 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { FileText, Plus, QrCode, Clock, CheckCircle, XCircle, Truck, Package, Users, User, AlertCircle, History, Trash2 } from "lucide-react"
+import { FileText, Plus, QrCode, Clock, CheckCircle, XCircle, Truck, Package, Users, User, AlertCircle, History, Trash2, Filter, Search, Activity, Archive } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
 import { Document, User as UserType } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
+import SidebarLayout from "@/components/sidebar-layout"
 
 export default function Dashboard() {
   const [user, setUser] = useState<UserType | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
   const [allDocuments, setAllDocuments] = useState<Document[]>([])
+  const [filteredDocuments, setFilteredDocuments] = useState<Document[]>([])
+  const [activeDocuments, setActiveDocuments] = useState<Document[]>([])
+  const [historyDocuments, setHistoryDocuments] = useState<Document[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [currentPage, setCurrentPage] = useState(1)
+  const [itemsPerPage] = useState(10)
+  const [activeTab, setActiveTab] = useState("active")
   const router = useRouter()
   const { toast } = useToast()
 
@@ -48,6 +60,26 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [user])
 
+  useEffect(() => {
+    // Filter documents based on search and status for current tab
+    let filtered = getCurrentDocuments()
+    
+    if (searchTerm) {
+      filtered = filtered.filter(doc => 
+        doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        doc.type.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+    }
+    
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(doc => doc.status === statusFilter)
+    }
+    
+    setFilteredDocuments(filtered)
+    setCurrentPage(1) // Reset to first page when filtering
+  }, [activeDocuments, historyDocuments, searchTerm, statusFilter, activeTab])
+
   const loadDocuments = async (currentUser: UserType) => {
     try {
       const userDocs = await EnhancedDocumentService.getDocumentsForUser(currentUser)
@@ -69,8 +101,13 @@ export default function Dashboard() {
         console.log("=== END DEBUG ===")
       }
       
+      // Separate documents into active and history
+      const { active, history } = separateDocuments(userDocs)
+      
       setDocuments(userDocs)
       setAllDocuments(allDocs)
+      setActiveDocuments(active)
+      setHistoryDocuments(history)
     } catch (error) {
       toast({
         title: "Error Loading Documents",
@@ -80,6 +117,29 @@ export default function Dashboard() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Separate documents into active and history based on status
+  const separateDocuments = (docs: Document[]) => {
+    const activeStatuses = [
+      "Ready for Pickup",
+      "In Transit", 
+      "With Approver for Review",
+      "Approved by Approver. Pending pickup for next step",
+      "Approval Complete. Pending return to Originator",
+      "Rejected. Awaiting Revision",
+      "Delivered"
+    ]
+
+    const active = docs.filter(doc => activeStatuses.includes(doc.status))
+    const history = docs.filter(doc => !activeStatuses.includes(doc.status))
+
+    return { active, history }
+  }
+
+  // Get current documents based on active tab
+  const getCurrentDocuments = () => {
+    return activeTab === "active" ? activeDocuments : historyDocuments
   }
 
   const getStatusIcon = (status: string) => {
@@ -101,6 +161,7 @@ export default function Dashboard() {
     if (status.includes("Pickup")) return "bg-purple-100 text-purple-800"
     if (status.includes("Delivered")) return "bg-green-100 text-green-800"
     if (status.includes("Completed")) return "bg-gray-100 text-gray-800"
+    if (status.includes("Cancelled")) return "bg-red-100 text-red-800"
     return "bg-gray-100 text-gray-800"
   }
 
@@ -198,157 +259,60 @@ export default function Dashboard() {
 
   const getRoleActions = () => {
     switch (user?.role) {
-      case "admin":
-        return (
-          <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-              <Link href="/create-document">
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                  <CardContent className="flex items-center p-4 sm:p-6">
-                    <Plus className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600 mr-3 sm:mr-4 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-sm sm:text-base">Create New Document</h3>
-                      <p className="text-xs sm:text-sm text-gray-600">Start a new workflow</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-              <Link href="/templates">
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                  <CardContent className="flex items-center p-4 sm:p-6">
-                    <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 mr-3 sm:mr-4 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-sm sm:text-base">Manage Templates</h3>
-                      <p className="text-xs sm:text-sm text-gray-600">Create and edit document templates</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-              <Link href="/workflow-guide">
-                <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                  <CardContent className="flex items-center p-4 sm:p-6">
-                    <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 mr-3 sm:mr-4 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-sm sm:text-base">Workflow Guide</h3>
-                      <p className="text-xs sm:text-sm text-gray-600">Learn how to test the system</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
+              case "admin":
+          return (
+            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+              <h3 className="text-lg font-semibold mb-4">Admin Actions</h3>
+              <div className="flex flex-wrap gap-2">
+                <Link href="/create-document">
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Document
+                  </Button>
+                </Link>
+              </div>
             </div>
-            
-            {/* Debug Panel */}
-            <Card className="bg-yellow-50 border-yellow-200">
-              <CardHeader className="pb-2 sm:pb-4">
-                <CardTitle className="text-xs sm:text-sm text-yellow-800">Debug Tools</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
-                  <Button variant="outline" size="sm" onClick={handleDebugLocalStorage} className="text-xs">
-                    <span className="hidden sm:inline">Test localStorage</span>
-                    <span className="sm:hidden">Test</span>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleCreateSampleDocuments} className="text-xs">
-                    <span className="hidden sm:inline">Create Sample Docs</span>
-                    <span className="sm:hidden">Sample</span>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleShowRoleBreakdown} className="text-xs">
-                    <span className="hidden sm:inline">Show Role Breakdown</span>
-                    <span className="sm:hidden">Roles</span>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleInspectLocalStorage} className="text-xs">
-                    <span className="hidden sm:inline">Inspect localStorage</span>
-                    <span className="sm:hidden">Inspect</span>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => loadDocuments(user!)} className="text-xs">
-                    Refresh
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleClearDocuments} className="text-xs">
-                    <span className="hidden sm:inline">Clear All Documents</span>
-                    <span className="sm:hidden">Clear</span>
-                  </Button>
-                </div>
-                <p className="text-xs text-yellow-700 mt-2">
-                  <span className="hidden sm:inline">Total documents in system: {allDocuments.length} | Your documents: {documents.length}</span>
-                  <span className="sm:hidden">Total: {allDocuments.length} | Yours: {documents.length}</span>
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        )
+          )
       case "mail":
         return (
-          <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
-            <Link href="/scan-qr">
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="flex items-center p-4 sm:p-6">
-                  <QrCode className="h-6 w-6 sm:h-8 sm:w-8 text-purple-600 mr-3 sm:mr-4 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-sm sm:text-base">Scan QR Code</h3>
-                    <p className="text-xs sm:text-sm text-gray-600">Update document status</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-            
-            {/* Debug Panel for Mail Controllers */}
-            <Card className="bg-purple-50 border-purple-200">
-              <CardHeader className="pb-2 sm:pb-4">
-                <CardTitle className="text-xs sm:text-sm text-purple-800">Mail Controller Debug</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 sm:gap-2">
-                  <Button variant="outline" size="sm" onClick={() => loadDocuments(user!)} className="text-xs">
-                    <span className="hidden sm:inline">Refresh Documents</span>
-                    <span className="sm:hidden">Refresh</span>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleInspectLocalStorage} className="text-xs">
-                    <span className="hidden sm:inline">Inspect localStorage</span>
-                    <span className="sm:hidden">Inspect</span>
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => router.push('/test-persistence')} className="text-xs">
-                    <span className="hidden sm:inline">Test Persistence</span>
-                    <span className="sm:hidden">Test</span>
-                  </Button>
-                </div>
-                <p className="text-xs text-purple-700 mt-2">
-                  <span className="hidden sm:inline">Total documents: {allDocuments.length} | Available for mail: {documents.length}</span>
-                  <span className="sm:hidden">Total: {allDocuments.length} | Mail: {documents.length}</span>
-                </p>
-              </CardContent>
-            </Card>
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+            <h3 className="text-lg font-semibold mb-4">Mail Controller Actions</h3>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/scan-qr">
+                <Button size="sm">
+                  <QrCode className="h-4 w-4 mr-2" />
+                  Scan QR Code
+                </Button>
+              </Link>
+            </div>
           </div>
         )
       case "approver":
         return (
-          <div className="mb-4 sm:mb-6">
-            <Link href="/scan-qr">
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="flex items-center p-4 sm:p-6">
-                  <QrCode className="h-6 w-6 sm:h-8 sm:w-8 text-orange-600 mr-3 sm:mr-4 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-sm sm:text-base">Scan QR Code</h3>
-                    <p className="text-xs sm:text-sm text-gray-600">Receive and approve documents</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+            <h3 className="text-lg font-semibold mb-4">Approver Actions</h3>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/scan-qr">
+                <Button size="sm">
+                  <QrCode className="h-4 w-4 mr-2" />
+                  Scan QR Code
+                </Button>
+              </Link>
+            </div>
           </div>
         )
       case "recipient":
         return (
-          <div className="mb-4 sm:mb-6">
-            <Link href="/scan-qr">
-              <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                <CardContent className="flex items-center p-4 sm:p-6">
-                  <QrCode className="h-6 w-6 sm:h-8 sm:w-8 text-green-600 mr-3 sm:mr-4 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-sm sm:text-base">Scan QR Code</h3>
-                    <p className="text-xs sm:text-sm text-gray-600">Confirm document receipt</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+            <h3 className="text-lg font-semibold mb-4">Recipient Actions</h3>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/scan-qr">
+                <Button size="sm">
+                  <QrCode className="h-4 w-4 mr-2" />
+                  Scan QR Code
+                </Button>
+              </Link>
+            </div>
           </div>
         )
       default:
@@ -357,91 +321,137 @@ export default function Dashboard() {
   }
 
   const getDocumentActions = (document: Document) => {
-    switch (user?.role) {
-      case "admin":
-        if (document.createdBy === user.email) {
-          return (
-            <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2 w-full sm:w-auto">
-              <Link href={`/document/${document.id}`} className="w-full sm:w-auto">
-                <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                  <History className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">View</span>
-                  <span className="sm:hidden">Details</span>
-                </Button>
-              </Link>
-              {document.status === "Approval Complete. Pending return to Originator" && (
-                <Button variant="outline" size="sm" onClick={() => handleCloseDocument(document.id)} className="w-full sm:w-auto">
-                  <CheckCircle className="h-4 w-4 mr-1" />
-                  <span className="hidden sm:inline">Close Workflow</span>
-                  <span className="sm:hidden">Close</span>
-                </Button>
-              )}
-              {document.status === "Completed and Archived" && (
-                <Button variant="outline" size="sm" disabled className="w-full sm:w-auto">
-                  <CheckCircle className="h-4 w-4 mr-1" />
-                  Closed
-                </Button>
-              )}
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={() => handleDeleteDocument(document.id)} 
-                className="w-full sm:w-auto text-red-600 hover:text-red-700 hover:bg-red-50"
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Delete</span>
-                <span className="sm:hidden">Del</span>
-              </Button>
-            </div>
-          )
-        }
-        break
-      case "mail":
-        return (
-          <Link href="/scan-qr" className="w-full sm:w-auto">
-            <Button variant="outline" size="sm" className="w-full sm:w-auto">
-              <QrCode className="h-4 w-4 mr-1" />
-              Scan QR
-            </Button>
-          </Link>
+    const actions = []
+
+    // Show document details
+    actions.push(
+      <Link key="view" href={`/document/${document.id}`}>
+        <Button variant="outline" size="sm">
+          View Details
+        </Button>
+      </Link>
+    )
+
+    // Role-specific actions
+    if (user?.role === "admin") {
+      // Admin can see cover sheet and close completed documents
+      actions.push(
+        <Link key="cover" href={`/cover-sheet/${document.id}`}>
+          <Button variant="outline" size="sm">
+            Cover Sheet
+          </Button>
+        </Link>
+      )
+
+             if (document.status === "Delivered" || 
+           document.status === "Completed and Archived") {
+        actions.push(
+          <Button
+            key="close"
+            variant="outline"
+            size="sm"
+            onClick={() => handleCloseDocument(document.id)}
+          >
+            Close Workflow
+          </Button>
         )
-      case "approver":
-        if (document.workflow === "flow" && document.approvalSteps) {
-          const currentStep = document.approvalSteps[document.currentStepIndex || 0]
-          if (currentStep?.approverEmail === user.email && currentStep.status === "pending") {
-            return (
-              <div className="flex flex-col sm:flex-row gap-2 sm:space-x-2 w-full sm:w-auto">
-                <Link href="/scan-qr" className="w-full sm:w-auto">
-                  <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                    <QrCode className="h-4 w-4 mr-1" />
-                    Scan QR
-                  </Button>
-                </Link>
-                <Link href={`/document/${document.id}`} className="w-full sm:w-auto">
-                  <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                    Review
-                  </Button>
-                </Link>
-              </div>
-            )
-          }
-        }
-        break
-      case "recipient":
-        if (document.workflow === "drop" && document.recipient === user.email) {
-          return (
-            <Link href="/scan-qr" className="w-full sm:w-auto">
-              <Button variant="outline" size="sm" className="w-full sm:w-auto">
-                <QrCode className="h-4 w-4 mr-1" />
-                <span className="hidden sm:inline">Confirm Receipt</span>
-                <span className="sm:hidden">Confirm</span>
-              </Button>
-            </Link>
-          )
-        }
-        break
+      }
+
+             // Admin can edit documents
+       actions.push(
+         <Link key="edit" href={`/document/${document.id}`}>
+           <Button
+             variant="outline"
+             size="sm"
+             className="text-blue-600 hover:text-blue-700"
+           >
+             Edit
+           </Button>
+         </Link>
+       )
+
+       // Admin can cancel documents
+       actions.push(
+         <Button
+           key="cancel"
+           variant="outline"
+           size="sm"
+           onClick={() => handleCancelDocument(document.id)}
+           className="text-red-600 hover:text-red-700"
+         >
+           Cancel Document
+         </Button>
+       )
+
+       // Admin can create revision for rejected documents
+       if (EnhancedDocumentService.canCreateRevision(document)) {
+         actions.push(
+           <Button
+             key="revise"
+             variant="outline"
+             size="sm"
+             onClick={() => handleCreateRevision(document.id)}
+             className="text-orange-600 hover:text-orange-700"
+           >
+             Create Revision
+           </Button>
+         )
+       }
     }
-    return null
+
+         if (user?.role === "mail") {
+       // Mail controller actions based on document status
+       if (document.status === "Ready for Pickup" || 
+           document.status === "Approved by Approver. Pending pickup for next step" ||
+           document.status === "Approval Complete. Pending return to Originator") {
+         actions.push(
+           <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
+             <Button size="sm">
+               <QrCode className="h-4 w-4 mr-2" />
+               Scan QR
+             </Button>
+           </Link>
+         )
+         
+
+       }
+     }
+
+     if (user?.role === "approver") {
+       // Approver actions
+       if (document.status === "With Approver for Review" || 
+           document.status === "In Transit") {
+         actions.push(
+           <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
+             <Button size="sm">
+               <QrCode className="h-4 w-4 mr-2" />
+               Scan QR
+             </Button>
+           </Link>
+         )
+       }
+     }
+
+     if (user?.role === "recipient") {
+       // Recipient actions  
+       if (document.status === "In Transit" || 
+           document.status === "Delivered") {
+         actions.push(
+           <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
+             <Button size="sm">
+               <QrCode className="h-4 w-4 mr-2" />
+               Scan QR
+             </Button>
+           </Link>
+         )
+       }
+     }
+
+    return (
+      <div className="flex flex-wrap gap-2">
+        {actions}
+      </div>
+    )
   }
 
   const handleCloseDocument = async (documentId: string) => {
@@ -472,51 +482,67 @@ export default function Dashboard() {
     }
   }
 
-  const handleDeleteDocument = async (documentId: string) => {
-    if (!user) return
+  const handleCancelDocument = async (documentId: string) => {
+    if (!confirm("Are you sure you want to cancel this document? This action cannot be undone.")) {
+      return
+    }
 
     try {
-      const document = await EnhancedDocumentService.getDocumentById(documentId)
-      if (!document) {
+      const result = await EnhancedDocumentService.processScan(documentId, "cancel", user!, "Document cancelled by admin")
+      
+      if (result.success) {
+        toast({
+          title: "Document Cancelled",
+          description: "Document workflow has been cancelled successfully.",
+        })
+        // Refresh the documents list
+        loadDocuments(user!)
+      } else {
         toast({
           title: "Error",
-          description: "Document not found",
-          variant: "destructive",
+          description: result.message || "Failed to cancel document",
+          variant: "destructive"
         })
-        return
       }
-
-      // Only allow deletion if user is admin and document creator
-      if (user.role !== "admin" || document.createdBy !== user.email) {
-        toast({
-          title: "Cannot Delete Document",
-          description: "Only the document creator (admin) can delete documents",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // Confirm deletion
-      if (!confirm(`Are you sure you want to delete "${document.title}"? This action cannot be undone.`)) {
-        return
-      }
-
-      await EnhancedDocumentService.deleteDocument(documentId)
-      await loadDocuments(user)
-      
-      toast({
-        title: "Document Deleted",
-        description: "The document has been permanently deleted",
-      })
     } catch (error) {
-      console.error("Error deleting document:", error)
+      console.error("Error cancelling document:", error)
       toast({
         title: "Error",
-        description: "Failed to delete document",
+        description: "An unexpected error occurred while cancelling the document",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDeleteDocument = async (documentId: string) => {
+    if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+      return
+    }
+
+    try {
+      await EnhancedDocumentService.deleteDocument(documentId)
+      toast({
+        title: "Document Deleted",
+        description: "The document has been deleted successfully",
+      })
+      await loadDocuments(user!)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "An error occurred while deleting the document",
         variant: "destructive",
       })
     }
   }
+
+  const handleCreateRevision = async (documentId: string) => {
+    // Redirect to create-document page for editing the revision
+    router.push(`/create-document?revisionOf=${documentId}`)
+  }
+
+
+
+
 
   const getWorkflowInfo = (document: Document) => {
     if (document.workflow === "flow" && document.approvalSteps) {
@@ -544,6 +570,47 @@ export default function Dashboard() {
         current: ""
       }
     }
+  }
+
+  const getApprovalStatus = (document: Document) => {
+    if (document.workflow !== "flow" || !document.approvalSteps || user?.role !== "approver") {
+      return null
+    }
+
+    const userStep = document.approvalSteps.find(step => step.approverEmail === user.email)
+    if (!userStep || userStep.status !== "pending") {
+      return null
+    }
+
+    const currentStepIndex = document.currentStepIndex || 0
+    const isCurrentTurn = document.approvalSteps[currentStepIndex]?.approverEmail === user.email
+
+    if (document.approvalMode === "flexible") {
+      return (
+        <Badge className="bg-green-100 text-green-800 text-xs ml-2">
+          <CheckCircle className="h-3 w-3 mr-1" />
+          Ready to Review
+        </Badge>
+      )
+    } else if (document.approvalMode === "sequential") {
+      if (isCurrentTurn) {
+        return (
+          <Badge className="bg-green-100 text-green-800 text-xs ml-2">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Ready to Review
+          </Badge>
+        )
+      } else {
+        return (
+          <Badge className="bg-gray-100 text-gray-600 text-xs ml-2">
+            <Clock className="h-3 w-3 mr-1" />
+            Incoming
+          </Badge>
+        )
+      }
+    }
+
+    return null
   }
 
   const getDocumentDescription = () => {
@@ -576,207 +643,295 @@ export default function Dashboard() {
     }
   }
 
+  // Get unique statuses for filter dropdown
+  const getUniqueStatuses = () => {
+    const statuses = [...new Set(getCurrentDocuments().map(doc => doc.status))]
+    return statuses.sort()
+  }
+
+  // Render document table for each tab
+  const renderDocumentTable = (tabType: "active" | "history") => {
+    const emptyMessage = tabType === "active" 
+      ? "No active documents found. Documents in progress will appear here."
+      : "No completed documents found. Finished documents will appear here."
+
+    // Pagination
+    const totalPages = Math.ceil(filteredDocuments.length / itemsPerPage)
+    const startIndex = (currentPage - 1) * itemsPerPage
+    const endIndex = startIndex + itemsPerPage
+    const currentDocuments = filteredDocuments.slice(startIndex, endIndex)
+
+    return (
+      <>
+        {/* Table Content */}
+        {filteredDocuments.length === 0 ? (
+          <div className="text-center py-12">
+            <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No Documents Found</h3>
+            <p className="text-gray-600 mb-4">{emptyMessage}</p>
+            {user?.role === "admin" && tabType === "active" && (
+              <Link href="/create-document">
+                <Button>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create First Document
+                </Button>
+              </Link>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-full">
+                <thead className="bg-gray-50">
+                  <tr className="border-b border-gray-200">
+                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sr.</th>
+                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document ID</th>
+                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
+                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="hidden md:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workflow</th>
+                    <th className="hidden sm:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {currentDocuments.map((doc, index) => {
+                    const workflowInfo = getWorkflowInfo(doc)
+                    const srNo = startIndex + index + 1
+                    return (
+                      <tr key={doc.id} className="hover:bg-gray-50">
+                        <td className="px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{srNo}</td>
+                        <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
+                          <div className="text-xs sm:text-sm font-medium text-blue-600 break-all">{doc.id}</div>
+                        </td>
+                        <td className="px-2 sm:px-4 py-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1">
+                            <div className="text-xs sm:text-sm font-medium text-gray-900 truncate max-w-32 sm:max-w-none">{doc.title}</div>
+                            {getApprovalStatus(doc)}
+                          </div>
+                        </td>
+                        <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
+                          <Badge className={`${getStatusColor(doc.status)} text-xs`}>
+                            {getStatusIcon(doc.status)}
+                            <span className="ml-1 hidden sm:inline">{doc.status}</span>
+                          </Badge>
+                        </td>
+                        <td className="hidden md:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{doc.type}</td>
+                        <td className="hidden lg:table-cell px-2 sm:px-4 py-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-1 text-sm text-gray-600">
+                            {workflowInfo.icon}
+                            <span>{workflowInfo.info}</span>
+                          </div>
+                        </td>
+                        <td className="hidden sm:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {new Date(doc.createdAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-2 sm:px-4 py-4 whitespace-nowrap text-sm">
+                          <div className="flex flex-col sm:flex-row gap-1">
+                            {getDocumentActions(doc)}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between px-4 py-3 border-t border-gray-200 gap-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-700 hidden sm:inline">Items per page:</span>
+                <select 
+                  className="text-sm border border-gray-300 rounded px-2 py-1"
+                  value={itemsPerPage}
+                  disabled
+                >
+                  <option value={10}>10</option>
+                </select>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <span className="text-sm text-gray-700 text-center">
+                  {startIndex + 1} - {Math.min(endIndex, filteredDocuments.length)} of {filteredDocuments.length}
+                </span>
+                <div className="flex items-center justify-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="text-xs sm:text-sm"
+                  >
+                    <span className="hidden sm:inline">Previous</span>
+                    <span className="sm:hidden">Prev</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="text-xs sm:text-sm"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </>
+    )
+  }
+
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading dashboard...</p>
+      <SidebarLayout>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="mt-4 text-gray-600">Loading dashboard...</p>
+          </div>
         </div>
-      </div>
+      </SidebarLayout>
     )
   }
 
   if (!user) return <div>Loading...</div>
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-3 sm:py-4">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">
-                Document Tracking
-              </h1>
-              <p className="text-xs sm:text-sm text-gray-600 truncate">
-                {user.role === "admin" ? "Department Admin" : 
-                user.role === "mail" ? "Mail Controller" :
-                user.role === "approver" ? "Approver/Signer" : "Recipient"}
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                localStorage.removeItem("user")
-                // Note: We keep documents in localStorage for persistence across sessions
-                router.push("/")
-              }}
-              className="ml-2"
-            >
-              <span className="hidden sm:inline">Logout</span>
-              <span className="sm:hidden">Exit</span>
-            </Button>
-          </div>
+    <SidebarLayout>
+      <div className="p-6">
+        {/* Breadcrumb */}
+        <div className="flex items-center space-x-2 text-sm text-gray-500 mb-4">
+          <span>Home</span>
+          <span>/</span>
+          <span>Documents</span>
+          <span>/</span>
+          <span className="text-gray-900">Document Distribution System</span>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+        {/* Page Title */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">Document Distribution System</h1>
+        </div>
+
         {/* Role-specific Actions */}
         {getRoleActions()}
 
         {/* System Statistics (for admin) */}
         {user.role === "admin" && (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Card>
-              <CardContent className="p-3 sm:p-4">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-gray-600">Total</p>
-                    <p className="text-lg sm:text-2xl font-bold">{allDocuments.length}</p>
+                    <p className="text-sm text-gray-600">Total</p>
+                    <p className="text-2xl font-bold">{allDocuments.length}</p>
                   </div>
-                  <FileText className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
+                  <FileText className="h-8 w-8 text-blue-500" />
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-3 sm:p-4">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-gray-600">In Transit</p>
-                    <p className="text-lg sm:text-2xl font-bold">
+                    <p className="text-sm text-gray-600">In Transit</p>
+                    <p className="text-2xl font-bold">
                       {allDocuments.filter(d => d.status.includes("Transit")).length}
                     </p>
                   </div>
-                  <Truck className="h-6 w-6 sm:h-8 sm:w-8 text-yellow-500" />
+                  <Truck className="h-8 w-8 text-yellow-500" />
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-3 sm:p-4">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-gray-600">Review</p>
-                    <p className="text-lg sm:text-2xl font-bold">
+                    <p className="text-sm text-gray-600">Review</p>
+                    <p className="text-2xl font-bold">
                       {allDocuments.filter(d => d.status.includes("Review")).length}
                     </p>
                   </div>
-                  <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-orange-500" />
+                  <Clock className="h-8 w-8 text-orange-500" />
                 </div>
               </CardContent>
             </Card>
             <Card>
-              <CardContent className="p-3 sm:p-4">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs sm:text-sm text-gray-600">Done</p>
-                    <p className="text-lg sm:text-2xl font-bold">
+                    <p className="text-sm text-gray-600">Done</p>  
+                    <p className="text-2xl font-bold">
                       {allDocuments.filter(d => d.status.includes("Completed")).length}
                     </p>
                   </div>
-                  <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
+                  <CheckCircle className="h-8 w-8 text-green-500" />
                 </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {/* Document List */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              {user.role === "admin" ? "Your Documents" : 
-               user.role === "mail" ? "Documents for Pickup/Delivery" :
-               user.role === "approver" ? "Pending Approvals" : "Documents for You"}
-            </CardTitle>
-            <CardDescription>{getDocumentDescription()}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {documents.length === 0 ? (
-              <div className="text-center py-8">
-                <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Documents Found</h3>
-                <p className="text-gray-600 mb-4">{getEmptyStateMessage()}</p>
-                {user.role === "admin" && (
-                  <Link href="/create-document">
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create First Document
-                    </Button>
-                  </Link>
-                )}
+        {/* Document Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          <div className="bg-white rounded-lg border border-gray-200">
+            {/* Tabs Header */}
+            <div className="flex flex-col space-y-4 p-4 border-b border-gray-200">
+              <TabsList className="grid w-full grid-cols-2 max-w-md">
+                <TabsTrigger value="active" className="flex items-center gap-2">
+                  <Activity className="h-4 w-4" />
+                  Active Route ({activeDocuments.length})
+                </TabsTrigger>
+                <TabsTrigger value="history" className="flex items-center gap-2">
+                  <Archive className="h-4 w-4" />
+                  Route History ({historyDocuments.length})
+                </TabsTrigger>
+              </TabsList>
+              
+              {/* Filters */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <Button variant="outline" size="sm" className="w-fit">
+                  <Filter className="h-4 w-4 mr-2" />
+                  FILTER
+                </Button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative">
+                    <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <Input
+                      placeholder="Search by Document ID or Title"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 w-full sm:w-64"
+                    />
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-full sm:w-48">
+                      <SelectValue placeholder="Filter by Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      {getUniqueStatuses().map(status => (
+                        <SelectItem key={status} value={status}>{status}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            ) : (
-              <div className="space-y-3 sm:space-y-4">
-                {documents.map((doc) => {
-                  const workflowInfo = getWorkflowInfo(doc)
-                  return (
-                    <div key={doc.id} className="border rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="p-3 sm:p-4">
-                        {/* Mobile-first header */}
-                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 mb-3">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
-                              <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">{doc.title}</h3>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Badge variant="outline" className="text-xs">{doc.id}</Badge>
-                                <div className="flex items-center space-x-1 text-xs sm:text-sm text-gray-600">
-                                  {workflowInfo.icon}
-                                  <span>{workflowInfo.type}</span>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Status badge - full width on mobile */}
-                            <div className="mb-3 sm:mb-2">
-                              <Badge className={`${getStatusColor(doc.status)} text-xs`}>
-                                {getStatusIcon(doc.status)}
-                                <span className="ml-1">{doc.status}</span>
-                              </Badge>
-                            </div>
-                          </div>
-                          
-                          {/* Actions - bottom on mobile */}
-                          <div className="flex-shrink-0 sm:ml-4">
-                            {getDocumentActions(doc)}
-                          </div>
-                        </div>
-                        
-                        {/* Document details */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600 mb-2">
-                          <div>
-                            <span className="font-medium">Type:</span> {doc.type}
-                          </div>
-                          <div>
-                            <span className="font-medium">Created:</span> {new Date(doc.createdAt).toLocaleDateString()}
-                          </div>
-                          <div>
-                            <span className="font-medium">{workflowInfo.type === "Flow" ? "Progress:" : "Recipient:"}</span> {workflowInfo.info}
-                          </div>
-                        </div>
-                        
-                        {/* Workflow status */}
-                        {workflowInfo.current && (
-                          <div className={`text-xs sm:text-sm ${
-                            workflowInfo.current === "Ready to close workflow" 
-                              ? "text-green-600 font-semibold" 
-                              : "text-blue-600"
-                          }`}>
-                            {workflowInfo.current === "Ready to close workflow" && (
-                              <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4 inline mr-1" />
-                            )}
-                            {workflowInfo.current}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </main>
-    </div>
+            </div>
+
+            {/* Tab Contents */}
+            <TabsContent value="active" className="mt-0">
+              {renderDocumentTable("active")}
+            </TabsContent>
+            
+            <TabsContent value="history" className="mt-0">
+              {renderDocumentTable("history")}
+            </TabsContent>
+          </div>
+        </Tabs>
+      </div>
+    </SidebarLayout>
   )
 }

@@ -23,6 +23,7 @@ export default function ScanQR() {
   const [documentId, setDocumentId] = useState("")
   const [action, setAction] = useState<ActionType | "">("")
   const [comments, setComments] = useState("")
+  const [deliveryMethod, setDeliveryMethod] = useState<"drop_off" | "hand_to_hand" | "">("")
   const [scanResult, setScanResult] = useState<ScanResult | null>(null)
   const [isScanning, setIsScanning] = useState(false)
   const [scanMode, setScanMode] = useState<"camera" | "manual">("manual")
@@ -31,6 +32,8 @@ export default function ScanQR() {
   const [hasCamera, setHasCamera] = useState(false)
   const [scannedDocument, setScannedDocument] = useState<any>(null)
   const [showDocumentInfo, setShowDocumentInfo] = useState(false)
+  const [dropOffLocation, setDropOffLocation] = useState("")
+  const [defaultDropOffLocation, setDefaultDropOffLocation] = useState("")
   
   const router = useRouter()
   const { toast } = useToast()
@@ -49,6 +52,44 @@ export default function ScanQR() {
     checkCameraSupport()
   }, [router])
 
+  // Clear action selection when scanned document changes
+  useEffect(() => {
+    if (scannedDocument && user) {
+      // Clear current action selection
+      setAction("")
+      
+      // For mail controller, auto-select action if only one is available
+      const availableActions = EnhancedDocumentService.getAvailableActions(scannedDocument, user)
+      if (user.role === "mail" && availableActions.length === 1) {
+        setAction(availableActions[0])
+        
+        // Show appropriate message based on forced action
+        if (availableActions[0] === "pickup") {
+          if (EnhancedDocumentService.shouldForcePickup(scannedDocument, user)) {
+            const isFirstScan = scannedDocument.actionHistory.filter((a: any) => 
+              a.performedBy === user.email && 
+              ["pickup", "deliver"].includes(a.action)
+            ).length === 0
+            
+            toast({
+              title: isFirstScan ? "First Scan - Pickup Required" : "Pickup Required",
+              description: isFirstScan 
+                ? "This is your first scan of this document. Pickup action has been automatically selected."
+                : "Document has been processed by approver. Pickup action has been automatically selected.",
+            })
+          }
+        } else if (availableActions[0] === "deliver") {
+          if (EnhancedDocumentService.shouldForceDeliver(scannedDocument, user)) {
+            toast({
+              title: "Deliver Required",
+              description: "You have picked up this document. Deliver action has been automatically selected.",
+            })
+          }
+        }
+      }
+    }
+  }, [scannedDocument, user])
+
   const checkCameraSupport = async () => {
     const cameraSupported = await QRCodeScanner.hasCameraSupport()
     setHasCamera(cameraSupported)
@@ -58,6 +99,34 @@ export default function ScanQR() {
   }
 
   const getActionsForRole = (): { value: ActionType, label: string, description: string }[] => {
+    if (!user) return []
+
+    // If we have a scanned document, get available actions for that specific document
+    if (scannedDocument) {
+      const availableActions = EnhancedDocumentService.getAvailableActions(scannedDocument, user)
+      return availableActions.map(actionType => {
+        switch (actionType) {
+          case "pickup":
+            return { value: "pickup", label: "Pickup Document", description: "Collect document for delivery" }
+          case "deliver":
+            return { value: "deliver", label: "Deliver Document", description: "Deliver document to recipient" }
+          case "receive":
+            return { value: "receive", label: user.role === "recipient" ? "Confirm Receipt" : "Receive for Review", description: user.role === "recipient" ? "Confirm document receipt" : "Confirm receipt of document" }
+          case "approve":
+            return { value: "approve", label: "Approve and Send", description: "Approve and send to next step" }
+          case "reject":
+            return { value: "reject", label: "Reject and Send", description: "Reject and return for revision" }
+          case "close":
+            return { value: "close", label: "Close Document", description: "Mark document as completed" }
+          case "cancel":
+            return { value: "cancel", label: "Cancel Document", description: "Cancel document processing" }
+          default:
+            return { value: actionType, label: actionType, description: "" }
+        }
+      })
+    }
+
+    // Fallback to role-based actions if no document is scanned
     switch (user?.role) {
       case "mail":
         return [
@@ -67,8 +136,8 @@ export default function ScanQR() {
       case "approver":
         return [
           { value: "receive", label: "Receive for Review", description: "Confirm receipt of document" },
-          { value: "approve", label: "Approve Document", description: "Approve and send to next step" },
-          { value: "reject", label: "Reject Document", description: "Reject and return for revision" },
+          { value: "approve", label: "Approve and Send", description: "Approve and send to next step" },
+          { value: "reject", label: "Reject and Send", description: "Reject and return for revision" },
         ]
       case "recipient":
         return [
@@ -77,7 +146,7 @@ export default function ScanQR() {
       case "admin":
         return [
           { value: "close", label: "Close Document", description: "Mark document as completed" },
-          { value: "revise", label: "Revise Document", description: "Create revised version" }
+          { value: "cancel", label: "Cancel Document", description: "Cancel document processing" }
         ]
       default:
         return []
@@ -94,6 +163,16 @@ export default function ScanQR() {
       return
     }
 
+    // Check if approver needs to select delivery method
+    if (user.role === "approver" && (action === "approve" || action === "reject") && !deliveryMethod) {
+      toast({
+        title: "Missing Delivery Method",
+        description: "Please select how you want to deliver the document",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsScanning(true)
     setScanResult(null)
 
@@ -102,6 +181,7 @@ export default function ScanQR() {
         documentId: documentId.trim(),
         action,
         userRole: user.role,
+        deliveryMethod,
         comments: comments.trim()
       })
 
@@ -112,7 +192,8 @@ export default function ScanQR() {
         documentId.trim(),
         action as ActionType,
         user,
-        comments.trim() || undefined
+        comments.trim() || undefined,
+        deliveryMethod || undefined
       )
 
       console.log("Scan result:", result)
@@ -128,6 +209,7 @@ export default function ScanQR() {
         setDocumentId("")
         setAction("")
         setComments("")
+        setDeliveryMethod("")
       } else {
         console.log("Scan failed:", result.message, result.warnings)
         toast({
@@ -175,7 +257,7 @@ export default function ScanQR() {
     }
   }
 
-  const handleManualEntry = () => {
+  const handleManualEntry = async () => {
     if (!documentId) {
       toast({
         title: "Missing Document ID",
@@ -185,20 +267,50 @@ export default function ScanQR() {
       return
     }
 
-    const qrData = QRCodeScanner.manualEntry(documentId.trim())
-    if (qrData) {
-      setDocumentId(qrData.documentId)
+    try {
+      // Load document details to get drop off location
+      const document = await EnhancedDocumentService.getDocumentById(documentId.trim())
+      if (document) {
+        setScannedDocument(document)
+        setShowDocumentInfo(true)
+        
+        // Get drop off location for mail controller
+        if (user?.role === "mail") {
+          const location = getDropOffLocationForDocument(document)
+          setDefaultDropOffLocation(location)
+          setDropOffLocation(location)
+        }
+        
+        toast({
+          title: "Document Found",
+          description: `Document ${document.id} loaded successfully`,
+        })
+      } else {
+        toast({
+          title: "Document Not Found",
+          description: "Please check the document ID and try again",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
       toast({
-        title: "Document Found",
-        description: `Document ${qrData.documentId} loaded successfully`,
-      })
-    } else {
-      toast({
-        title: "Invalid Document ID",
-        description: "Please check the document ID and try again",
+        title: "Error Loading Document",
+        description: "Failed to load document details",
         variant: "destructive",
       })
     }
+  }
+
+  const getDropOffLocationForDocument = (document: any) => {
+    if (document.workflow === "flow" && document.approvalSteps) {
+      const currentStep = document.currentStepIndex || 0
+      if (currentStep < document.approvalSteps.length) {
+        const currentApprover = document.approvalSteps[currentStep]
+        return currentApprover.dropOffLocation || "Location not set"
+      }
+    }
+    // For creator pickup or final return
+    return document.createdByDropOffLocation || "Location not set"
   }
 
   const getActionIcon = (actionType: ActionType) => {
@@ -298,9 +410,8 @@ export default function ScanQR() {
           </Alert>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="max-w-3xl mx-auto space-y-6">
           
-          {/* Scanning Interface */}
           {/* Scanned Document Info */}
           {showDocumentInfo && scannedDocument && (
             <Card className="border-green-200 bg-green-50">
@@ -499,13 +610,21 @@ export default function ScanQR() {
                         setScanMode("manual")
                         
                         // Load document details
-                        const loadDocumentDetails = async () => {
+                        const                         loadDocumentDetails = async () => {
                           try {
                             const document = await EnhancedDocumentService.getDocumentById(docId)
                             if (document) {
                               setScannedDocument(document)
                               setDocumentId(docId)
                               setShowDocumentInfo(true)
+                              
+                              // Get drop off location for mail controller
+                              if (user?.role === "mail") {
+                                const location = getDropOffLocationForDocument(document)
+                                setDefaultDropOffLocation(location)
+                                setDropOffLocation(location)
+                              }
+                              
                               toast({
                                 title: "✅ Document Found",
                                 description: `Found document: ${document.title}`,
@@ -597,6 +716,94 @@ export default function ScanQR() {
                 )}
               </div>
 
+              {/* Delivery Method Selection (for approver approve/reject actions) */}
+              {user?.role === "approver" && (action === "approve" || action === "reject") && (
+                <div className="space-y-2">
+                  <Label htmlFor="deliveryMethod">How would you like to deliver this document?</Label>
+                  <Select value={deliveryMethod} onValueChange={(value) => setDeliveryMethod(value as "drop_off" | "hand_to_hand")}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select delivery method" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="drop_off">
+                        <div className="flex items-center">
+                          <Package className="h-4 w-4 mr-2 text-blue-600" />
+                          <div>
+                            <div className="font-medium">Drop Off</div>
+                            <div className="text-xs text-gray-500">Place document at drop-off point for Mail Controller pickup</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="hand_to_hand">
+                        <div className="flex items-center">
+                          <User className="h-4 w-4 mr-2 text-green-600" />
+                          <div>
+                            <div className="font-medium">Hand to Hand</div>
+                            <div className="text-xs text-gray-500">Deliver directly to next person (no Mail Controller needed)</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {deliveryMethod && (
+                    <div className="bg-blue-50 border border-blue-200 p-3 rounded">
+                      <p className="text-sm text-blue-800">
+                        {deliveryMethod === "drop_off" 
+                          ? "📦 Document will be placed at drop-off location for Mail Controller to pickup and deliver to next step."
+                          : "🤝 Document will be delivered directly to the next person. Mail Controller pickup is not required."
+                        }
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Drop Off Location (for mail controller) */}
+              {user?.role === "mail" && showDocumentInfo && (action === "pickup" || action === "deliver") && (
+                <Card className="bg-orange-50 border-orange-200">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-orange-800 text-sm flex items-center">
+                      <Package className="h-4 w-4 mr-2" />
+                      Drop Off Location
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-3">
+                      <div className="text-sm">
+                        <p className="font-medium text-orange-800">Default Location:</p>
+                        <p className="text-orange-700 bg-orange-100 p-2 rounded text-xs">
+                          {defaultDropOffLocation}
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="dropOffLocation" className="text-orange-800">
+                          Current Drop Off Location
+                        </Label>
+                        <Input
+                          id="dropOffLocation"
+                          placeholder="Enter drop off location"
+                          value={dropOffLocation}
+                          onChange={(e) => setDropOffLocation(e.target.value)}
+                          className="border-orange-300 focus:border-orange-500"
+                        />
+                        <p className="text-xs text-orange-600">
+                          💡 You can change this location if needed (e.g., different office, temporary location)
+                        </p>
+                      </div>
+                      
+                      {dropOffLocation !== defaultDropOffLocation && dropOffLocation && (
+                        <div className="bg-yellow-50 border border-yellow-200 p-2 rounded">
+                          <p className="text-xs text-yellow-800">
+                            ⚠️ Location changed from default. Make sure the recipient knows about this change.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Comments (for approve/reject actions) */}
               {(action === "approve" || action === "reject") && (
                 <div className="space-y-2">
@@ -642,125 +849,6 @@ export default function ScanQR() {
               </Button>
             </CardContent>
           </Card>
-
-          {/* Role Information & Instructions */}
-          <div className="space-y-6">
-            
-            {/* Current Role */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  {user.role === "mail" && <Truck className="h-5 w-5 mr-2 text-blue-600" />}
-                  {user.role === "approver" && <Users className="h-5 w-5 mr-2 text-orange-600" />}
-                  {user.role === "recipient" && <User className="h-5 w-5 mr-2 text-green-600" />}
-                  {user.role === "admin" && <CheckCircle className="h-5 w-5 mr-2 text-purple-600" />}
-                  Your Role
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div>
-                    <Badge variant="outline" className="text-sm">
-                      {user.role === "admin" ? "Department Admin" : 
-                       user.role === "mail" ? "Mail Controller" :
-                       user.role === "approver" ? "Approver/Signer" : "Recipient"}
-                    </Badge>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600">
-                      {user.role === "mail" && "You can pickup and deliver documents between departments"}
-                      {user.role === "approver" && "You can receive, review, approve, or reject documents"}
-                      {user.role === "recipient" && "You can confirm receipt of documents sent to you"}
-                      {user.role === "admin" && "You can close completed documents and manage workflows"}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Available Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Available Actions</CardTitle>
-                <CardDescription>Actions you can perform based on your role</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {availableActions.map((actionOption) => (
-                    <div key={actionOption.value} className="flex items-start space-x-3 p-3 border rounded-lg">
-                      <span className={getActionColor(actionOption.value)}>
-                        {getActionIcon(actionOption.value)}
-                      </span>
-                      <div>
-                        <p className="font-medium text-sm">{actionOption.label}</p>
-                        <p className="text-xs text-gray-600">{actionOption.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* QR Code Format Info */}
-            <Card className="bg-blue-50 border-blue-200">
-              <CardHeader>
-                <CardTitle className="text-blue-800">QR Code Format</CardTitle>
-                <CardDescription className="text-blue-600">
-                  What QR codes work with this system
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <p className="font-medium text-blue-800">✅ Supported formats:</p>
-                    <ul className="mt-2 space-y-1 text-blue-700">
-                      <li>• Document cover sheet QR codes (JSON format)</li>
-                      <li>• Document IDs starting with "DOC-"</li>
-                      <li>• URLs containing "/document/DOC-..."</li>
-                      <li>• Alphanumeric codes (5+ characters)</li>
-                    </ul>
-                  </div>
-                  <div>
-                    <p className="font-medium text-blue-800">📋 To test:</p>
-                    <ul className="mt-2 space-y-1 text-blue-700">
-                      <li>• Create a document first</li>
-                      <li>• Print the cover sheet</li>
-                      <li>• Scan the QR code on the cover sheet</li>
-                    </ul>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Instructions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>How to Scan</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div>
-                  <strong>Step 1:</strong> Use camera to scan QR code or enter Document ID manually
-                </div>
-                <div>
-                  <strong>Step 2:</strong> Select the appropriate action for your role
-                </div>
-                <div>
-                  <strong>Step 3:</strong> Add comments if required (especially for rejections)
-                </div>
-                <div>
-                  <strong>Step 4:</strong> Click "Process Action" to update document status
-                </div>
-                
-                <Alert className="mt-4">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-xs">
-                    Only authorized actions for your role will be processed. 
-                    The system will verify your permissions before updating document status.
-                  </AlertDescription>
-                </Alert>
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </main>
     </div>

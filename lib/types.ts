@@ -6,6 +6,7 @@ export interface User {
   role: UserRole
   department?: string
   name?: string
+  dropOffLocation?: string
 }
 
 // Workflow types
@@ -21,6 +22,7 @@ export type DocumentStatus =
   | "Rejected. Awaiting Revision"
   | "Delivered"
   | "Completed and Archived"
+  | "Cancelled"
 
 // Template field types
 export interface TemplateField {
@@ -68,10 +70,14 @@ export interface ApprovalStep {
   approverEmail: string
   approverName?: string
   department?: string
+  dropOffLocation?: string
   status: "pending" | "approved" | "rejected" | "skipped"
   timestamp?: string
   comments?: string
 }
+
+// Approval mode types
+export type ApprovalMode = "sequential" | "flexible"
 
 // Document interface
 export interface Document {
@@ -83,16 +89,21 @@ export interface Document {
   status: DocumentStatus
   createdAt: string
   createdBy: string
+  createdByDropOffLocation?: string
   updatedAt?: string
   
   // Flow workflow specific
   approvalSteps?: ApprovalStep[]
   currentStepIndex?: number
   rejectionReason?: string
+  approvalMode?: ApprovalMode // sequential (default) or flexible
   
   // Drop workflow specific
   recipient?: string
   recipientDepartment?: string
+  
+  // Revision system
+  revision?: DocumentRevision
   
   // QR Code data
   qrData: QRCodeData
@@ -100,8 +111,38 @@ export interface Document {
   // Tracking history
   actionHistory: DocumentAction[]
   
+  // Drop off locations (can be overridden by mail controller)
+  dropOffLocations?: {
+    [stepIndex: string]: {
+      defaultLocation: string
+      currentLocation: string
+      updatedBy?: string
+      updatedAt?: string
+    }
+  }
+  
   // File attachments (for future implementation)
   attachments?: FileAttachment[]
+}
+
+// Document revision system
+export interface DocumentRevision {
+  revisionNumber: number
+  originalDocumentId: string
+  previousRevisionId?: string
+  revisionReason: string
+  revisedBy: string
+  revisedAt: string
+  preservedApprovals: PreservedApproval[]
+}
+
+export interface PreservedApproval {
+  approverEmail: string
+  approverName?: string
+  approvedAt: string
+  comments?: string
+  originalDocumentId: string
+  preservedFromRevision: number
 }
 
 // QR Code data structure
@@ -125,6 +166,7 @@ export interface DocumentAction {
   performedAt: string
   location?: string
   comments?: string
+  deliveryMethod?: "drop_off" | "hand_to_hand"
   previousStatus?: DocumentStatus
   newStatus: DocumentStatus
 }
@@ -139,6 +181,8 @@ export type ActionType =
   | "return"
   | "close"
   | "revise"
+  | "cancel"
+  | "create_revision"
 
 // File attachment interface
 export interface FileAttachment {

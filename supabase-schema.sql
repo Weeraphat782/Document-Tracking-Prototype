@@ -4,6 +4,7 @@
 -- Create enums for type safety
 CREATE TYPE user_role AS ENUM ('admin', 'mail', 'approver', 'recipient');
 CREATE TYPE workflow_type AS ENUM ('flow', 'drop');
+CREATE TYPE approval_mode AS ENUM ('sequential', 'flexible');
 CREATE TYPE document_status AS ENUM (
   'Ready for Pickup',
   'In Transit', 
@@ -12,7 +13,8 @@ CREATE TYPE document_status AS ENUM (
   'Approval Complete. Pending return to Originator',
   'Rejected. Awaiting Revision',
   'Delivered',
-  'Completed and Archived'
+  'Completed and Archived',
+  'Cancelled'
 );
 
 -- Users table (for demo purposes - in production you'd use Supabase Auth)
@@ -20,6 +22,7 @@ CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   role user_role NOT NULL,
+  drop_off_location TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -56,7 +59,9 @@ CREATE TABLE documents (
   qr_data JSONB NOT NULL,
   approval_steps JSONB,
   action_history JSONB NOT NULL DEFAULT '[]'::jsonb,
-  template_id TEXT REFERENCES document_templates(id)
+  template_id TEXT REFERENCES document_templates(id),
+  approval_mode approval_mode DEFAULT 'sequential',
+  revision_data JSONB
 );
 
 -- Create indexes for better performance
@@ -65,6 +70,7 @@ CREATE INDEX idx_documents_status ON documents(status);
 CREATE INDEX idx_documents_workflow ON documents(workflow);
 CREATE INDEX idx_documents_created_at ON documents(created_at);
 CREATE INDEX idx_documents_template_id ON documents(template_id);
+CREATE INDEX idx_documents_revision_original ON documents USING GIN ((revision_data->>'originalDocumentId'));
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_templates_created_by ON document_templates(created_by);
@@ -91,11 +97,11 @@ CREATE POLICY "Allow all template operations" ON document_templates
   FOR ALL USING (true);
 
 -- Insert demo users
-INSERT INTO users (email, role) VALUES
-  ('admin@company.com', 'admin'),
-  ('mail@company.com', 'mail'),
-  ('manager@company.com', 'approver'),
-  ('recipient@company.com', 'recipient')
+INSERT INTO users (email, role, drop_off_location) VALUES
+  ('admin@company.com', 'admin', 'Admin Office - Floor 12'),
+  ('mail@company.com', 'mail', 'Mail Room - Ground Floor'),
+  ('manager@company.com', 'approver', 'Manager Office - Floor 8'),
+  ('recipient@company.com', 'recipient', 'General Office - Floor 5')
 ON CONFLICT (email) DO NOTHING;
 
 -- Insert default templates
@@ -187,7 +193,9 @@ RETURNS TABLE(
   qr_data JSONB,
   approval_steps JSONB,
   action_history JSONB,
-  template_id TEXT
+  template_id TEXT,
+  approval_mode approval_mode,
+  revision_data JSONB
 ) AS $$
 BEGIN
   CASE user_role

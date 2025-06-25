@@ -11,7 +11,10 @@ import {
   ScanResult,
   DocumentTemplate,
   CreateTemplateRequest,
-  Notification
+  Notification,
+  ApprovalMode,
+  DocumentRevision,
+  PreservedApproval
 } from './types'
 import { DatabaseService } from './database-service'
 
@@ -50,7 +53,8 @@ export class EnhancedDocumentService {
     createdBy: string,
     description?: string,
     approvers?: string[],
-    recipient?: string
+    recipient?: string,
+    approvalMode?: ApprovalMode
   ): Promise<Document> {
     console.log("About to create document:", title)
     const document = await DatabaseService.createDocument(
@@ -60,7 +64,8 @@ export class EnhancedDocumentService {
       createdBy,
       description,
       approvers,
-      recipient
+      recipient,
+      approvalMode
     )
     console.log("Document creation completed for:", document.id)
     return document
@@ -96,9 +101,10 @@ export class EnhancedDocumentService {
     documentId: string, 
     action: ActionType, 
     user: User,
-    comments?: string
+    comments?: string,
+    deliveryMethod?: "drop_off" | "hand_to_hand"
   ): Promise<ScanResult> {
-    console.log("Processing scan:", action, "on", documentId, "by", user.email)
+    console.log("Processing scan:", action, "on", documentId, "by", user.email, "delivery:", deliveryMethod)
 
     try {
       // Get the document
@@ -114,6 +120,19 @@ export class EnhancedDocumentService {
       // Check role access
       const accessCheck = this.checkRoleAccess(document, action, user)
       if (!accessCheck.allowed) {
+        // If there's a forced action, use it instead
+        if (accessCheck.forceAction) {
+          console.log(`Forcing action from ${action} to ${accessCheck.forceAction}`)
+          const result = this.executeAction(document, accessCheck.forceAction, user, comments, deliveryMethod)
+          if (result.success) {
+            result.message = `Action automatically changed to ${accessCheck.forceAction}: ${accessCheck.reason}`
+          }
+          if (result.success) {
+            await DatabaseService.updateDocument(result.document!)
+          }
+          return result
+        }
+        
         return {
           success: false,
           message: accessCheck.reason || "Access denied",
@@ -122,7 +141,7 @@ export class EnhancedDocumentService {
       }
 
       // Execute the action
-      const result = this.executeAction(document, action, user, comments)
+      const result = this.executeAction(document, action, user, comments, deliveryMethod)
       if (!result.success) {
         return result
       }
@@ -148,7 +167,7 @@ export class EnhancedDocumentService {
     document: Document, 
     action: ActionType, 
     user: User
-  ): { allowed: boolean, reason?: string, warnings?: string[] } {
+  ): { allowed: boolean, reason?: string, warnings?: string[], forceAction?: ActionType } {
     const warnings: string[] = []
 
     // Mail controller actions
@@ -159,6 +178,55 @@ export class EnhancedDocumentService {
           reason: "Mail controllers can only pickup or deliver documents" 
         }
       }
+
+      // Get mail controller's action history for this document
+      const mailActions = document.actionHistory.filter(a => 
+        a.performedBy === user.email && 
+        ["pickup", "deliver"].includes(a.action)
+      )
+
+      // Get the last action by this mail controller
+      const lastMailAction = mailActions[mailActions.length - 1]
+
+      // Check if there's been an approval/rejection after the last mail action
+      const hasApprovalAfterLastMail = lastMailAction ? 
+        document.actionHistory.some(a => 
+          ["approve", "reject"].includes(a.action) && 
+          new Date(a.performedAt) > new Date(lastMailAction.performedAt)
+        ) : false
+
+      // Determine expected action based on workflow state
+      let expectedAction: ActionType
+
+      if (mailActions.length === 0) {
+        // First scan ever - must pickup
+        expectedAction = "pickup"
+      } else if (lastMailAction.action === "pickup" && !hasApprovalAfterLastMail) {
+        // Last action was pickup and no approval yet - must deliver
+        expectedAction = "deliver"
+      } else if (hasApprovalAfterLastMail) {
+        // There's been approval/rejection after last mail action - must pickup again
+        expectedAction = "pickup"
+      } else if (lastMailAction.action === "deliver") {
+        // Last action was deliver - wait for approval/rejection
+        return {
+          allowed: false,
+          reason: "Document has been delivered. Waiting for approver action."
+        }
+      } else {
+        // Default to pickup
+        expectedAction = "pickup"
+      }
+
+      // Force the expected action
+      if (action !== expectedAction) {
+        return {
+          allowed: false,
+          reason: `Expected action is ${expectedAction}`,
+          forceAction: expectedAction
+        }
+      }
+
       return { allowed: true, warnings }
     }
 
@@ -170,6 +238,44 @@ export class EnhancedDocumentService {
           reason: "Approvers can only receive, approve, or reject documents" 
         }
       }
+
+      // For flow workflow, check if this approver is in the approval list
+      if (document.workflow === "flow" && document.approvalSteps && ["approve", "reject"].includes(action)) {
+        const approverStep = document.approvalSteps.find(step => step.approverEmail === user.email)
+        
+        if (!approverStep) {
+          return {
+            allowed: false,
+            reason: "You are not in the approval list for this document"
+          }
+        }
+
+        // Check if already processed
+        if (approverStep.status !== "pending") {
+          return {
+            allowed: false,
+            reason: `You have already ${approverStep.status} this document`
+          }
+        }
+
+        // Check approval mode
+        if (document.approvalMode === "sequential") {
+          // Sequential mode: only current step approver can act
+          const currentStepIndex = document.currentStepIndex || 0
+          const currentStep = document.approvalSteps[currentStepIndex]
+          
+          if (currentStep?.approverEmail !== user.email) {
+            return {
+              allowed: false,
+              reason: `Document is currently with ${currentStep?.approverEmail}. Sequential approval required.`
+            }
+          }
+        } else if (document.approvalMode === "flexible") {
+          // Flexible mode: any pending approver can act
+          warnings.push("Flexible approval mode: You can approve out of order")
+        }
+      }
+
       return { allowed: true, warnings }
     }
 
@@ -186,10 +292,10 @@ export class EnhancedDocumentService {
 
     // Admin actions
     if (user.role === "admin") {
-      if (!["close", "revise"].includes(action)) {
+      if (!["close", "revise", "cancel"].includes(action)) {
         return { 
           allowed: false, 
-          reason: "Admins can only close or revise documents they created" 
+          reason: "Admins can only close, revise, or cancel documents they created" 
         }
       }
       return { allowed: true, warnings }
@@ -203,7 +309,8 @@ export class EnhancedDocumentService {
     document: Document, 
     action: ActionType, 
     user: User,
-    comments?: string
+    comments?: string,
+    deliveryMethod?: "drop_off" | "hand_to_hand"
   ): ScanResult {
     const now = new Date()
     const timestamp = now.toISOString()
@@ -223,31 +330,73 @@ export class EnhancedDocumentService {
           break
         case "approve":
           if (document.workflow === "flow" && document.approvalSteps) {
-            const currentStepIndex = document.currentStepIndex || 0
-            document.approvalSteps[currentStepIndex].status = "approved"
-            document.approvalSteps[currentStepIndex].timestamp = timestamp
-            document.approvalSteps[currentStepIndex].comments = comments
+            // Find the approver's step
+            const approverStepIndex = document.approvalSteps.findIndex(step => step.approverEmail === user.email)
             
-            if (currentStepIndex < document.approvalSteps.length - 1) {
-              document.currentStepIndex = currentStepIndex + 1
-              newStatus = "Approved by Approver. Pending pickup for next step"
-            } else {
-              newStatus = "Approval Complete. Pending return to Originator"
+            if (approverStepIndex !== -1) {
+              // Mark this approver's step as approved
+              document.approvalSteps[approverStepIndex].status = "approved"
+              document.approvalSteps[approverStepIndex].timestamp = timestamp
+              document.approvalSteps[approverStepIndex].comments = comments
+              
+              // Check if all approvals are complete
+              const allApproved = document.approvalSteps.every(step => step.status === "approved")
+              const pendingSteps = document.approvalSteps.filter(step => step.status === "pending")
+              
+              if (allApproved) {
+                // All approvers have approved
+                if (deliveryMethod === "hand_to_hand") {
+                  newStatus = "Delivered"
+                } else {
+                  newStatus = "Approval Complete. Pending return to Originator"
+                }
+              } else if (document.approvalMode === "sequential") {
+                // Sequential mode: move to next pending step
+                const nextPendingIndex = document.approvalSteps.findIndex(step => step.status === "pending")
+                if (nextPendingIndex !== -1) {
+                  document.currentStepIndex = nextPendingIndex
+                }
+                if (deliveryMethod === "hand_to_hand") {
+                  newStatus = "With Approver for Review"
+                } else {
+                  newStatus = "Approved by Approver. Pending pickup for next step"
+                }
+              } else {
+                // Flexible mode: document can continue to any remaining approver
+                if (deliveryMethod === "hand_to_hand") {
+                  newStatus = pendingSteps.length > 0 ? "With Approver for Review" : "Delivered"
+                } else {
+                  newStatus = pendingSteps.length > 0 
+                    ? "Approved by Approver. Pending pickup for next step"
+                    : "Approval Complete. Pending return to Originator"
+                }
+              }
             }
           }
           break
         case "reject":
           if (document.workflow === "flow" && document.approvalSteps) {
-            const currentStepIndex = document.currentStepIndex || 0
-            document.approvalSteps[currentStepIndex].status = "rejected"
-            document.approvalSteps[currentStepIndex].timestamp = timestamp
-            document.approvalSteps[currentStepIndex].comments = comments
-            document.rejectionReason = comments
+            // Find the approver's step
+            const approverStepIndex = document.approvalSteps.findIndex(step => step.approverEmail === user.email)
+            
+            if (approverStepIndex !== -1) {
+              document.approvalSteps[approverStepIndex].status = "rejected"
+              document.approvalSteps[approverStepIndex].timestamp = timestamp
+              document.approvalSteps[approverStepIndex].comments = comments
+              document.rejectionReason = comments
+            }
           }
-          newStatus = "Rejected. Awaiting Revision"
+          if (deliveryMethod === "hand_to_hand") {
+            newStatus = "Delivered" // Document goes directly back to originator
+          } else {
+            newStatus = "Rejected. Awaiting Revision"
+          }
           break
         case "close":
           newStatus = "Completed and Archived"
+          break
+        case "cancel":
+          newStatus = "Cancelled"
           break
         default:
           return {
@@ -270,7 +419,8 @@ export class EnhancedDocumentService {
         performedAt: timestamp,
         previousStatus,
         newStatus,
-        comments
+        comments,
+        deliveryMethod
       }
       document.actionHistory.push(actionRecord)
 
@@ -308,7 +458,8 @@ export class EnhancedDocumentService {
       "Approval Complete. Pending return to Originator": { text: "Approved - Returning", color: "bg-green-100 text-green-800", icon: "check-double" },
       "Rejected. Awaiting Revision": { text: "Rejected", color: "bg-red-100 text-red-800", icon: "x" },
       "Delivered": { text: "Delivered", color: "bg-purple-100 text-purple-800", icon: "check-circle" },
-      "Completed and Archived": { text: "Completed", color: "bg-gray-100 text-gray-800", icon: "archive" }
+      "Completed and Archived": { text: "Completed", color: "bg-gray-100 text-gray-800", icon: "archive" },
+      "Cancelled": { text: "Cancelled", color: "bg-red-100 text-red-800", icon: "ban" }
     }
     
     return statusMap[status] || { text: status, color: "bg-gray-100 text-gray-800", icon: "file" }
@@ -353,6 +504,560 @@ export class EnhancedDocumentService {
     } catch (error) {
       console.error("Error creating sample documents:", error)
     }
+  }
+  // USER MANAGEMENT FUNCTIONS
+
+  // Get all users
+  static async getAllUsers(): Promise<User[]> {
+    return await DatabaseService.getAllUsers()
+  }
+
+  // Get user by email
+  static async getUserByEmail(email: string): Promise<User | null> {
+    return await DatabaseService.getUserByEmail(email)
+  }
+
+  // Get users by role
+  static async getUsersByRole(role: UserRole): Promise<User[]> {
+    return await DatabaseService.getUsersByRole(role)
+  }
+
+  // Update user drop off location
+  static async updateUserDropOffLocation(email: string, dropOffLocation: string): Promise<void> {
+    return await DatabaseService.updateUserDropOffLocation(email, dropOffLocation)
+  }
+
+  // Create revision from rejected document
+  static async createRevision(
+    originalDocumentId: string,
+    revisionReason: string,
+    revisedBy: string
+  ): Promise<Document> {
+    console.log("Creating revision for document:", originalDocumentId)
+
+    try {
+      // Get the original document
+      const originalDocument = await this.getDocumentById(originalDocumentId)
+      if (!originalDocument) {
+        throw new Error("Original document not found")
+      }
+
+      // Validate that document can be revised (use same logic as canCreateRevision)
+      if (!this.canCreateRevision(originalDocument)) {
+        throw new Error("Can only create revision from rejected documents")
+      }
+
+      // Get approved steps from original document
+      const preservedApprovals: PreservedApproval[] = []
+      const newApprovalSteps: ApprovalStep[] = []
+
+      if (originalDocument.approvalSteps) {
+        originalDocument.approvalSteps.forEach((step, index) => {
+          if (step.status === "approved") {
+            // Preserve this approval
+            preservedApprovals.push({
+              approverEmail: step.approverEmail,
+              approverName: step.approverName,
+              approvedAt: step.timestamp!,
+              comments: step.comments,
+              originalDocumentId: originalDocumentId,
+              preservedFromRevision: originalDocument.revision?.revisionNumber || 1
+            })
+
+            // Keep approved status in new document (preserve the approval)
+            newApprovalSteps.push({
+              ...step,
+              status: "approved", // Keep as approved, not skipped
+              timestamp: step.timestamp, // Preserve original timestamp
+              comments: step.comments ? `${step.comments} [Preserved from revision ${originalDocument.revision?.revisionNumber || 1}]` : `Preserved from revision ${originalDocument.revision?.revisionNumber || 1}`
+            })
+          } else {
+            // Reset pending/rejected steps
+            newApprovalSteps.push({
+              ...step,
+              status: "pending",
+              timestamp: undefined,
+              comments: undefined
+            })
+          }
+        })
+      }
+
+      // Find first pending step for currentStepIndex
+      const firstPendingIndex = newApprovalSteps.findIndex(step => step.status === "pending")
+      const allApproved = firstPendingIndex === -1
+
+      // Determine document status and current step
+      let documentStatus: DocumentStatus
+      let currentStepIndex: number
+      let qrCurrentStep: string
+
+      if (allApproved) {
+        documentStatus = "Approval Complete. Pending return to Originator"
+        currentStepIndex = newApprovalSteps.length
+        qrCurrentStep = "All Approved - Ready for Completion"
+      } else {
+        // Check if we're in sequential mode and need to wait for mail pickup
+        if (originalDocument.approvalMode === "sequential") {
+          const approvedCount = newApprovalSteps.filter(step => step.status === "approved").length
+          if (approvedCount > 0) {
+            // There are approved steps, so mail needs to pickup for next step
+            documentStatus = "Approved by Approver. Pending pickup for next step"
+            currentStepIndex = firstPendingIndex
+            qrCurrentStep = "Approved - Ready for Pickup to Next Step"
+          } else {
+            // No approvals yet, ready for initial pickup
+            documentStatus = "Ready for Pickup"
+            currentStepIndex = 0
+            qrCurrentStep = "Ready for Pickup"
+          }
+        } else {
+          // Flexible mode - ready for pickup to any pending approver
+          documentStatus = "Ready for Pickup"
+          currentStepIndex = firstPendingIndex
+          qrCurrentStep = "Ready for Pickup"
+        }
+      }
+
+      // Create revision data
+      const revisionNumber = (originalDocument.revision?.revisionNumber || 1) + 1
+      const revision: DocumentRevision = {
+        revisionNumber,
+        originalDocumentId,
+        previousRevisionId: originalDocument.id,
+        revisionReason,
+        revisedBy,
+        revisedAt: new Date().toISOString(),
+        preservedApprovals
+      }
+
+      // Generate new document ID
+      const newDocumentId = this.generateDocumentId()
+
+      // Create new QR data
+      const qrData: QRCodeData = {
+        documentId: newDocumentId,
+        title: originalDocument.title,
+        workflow: originalDocument.workflow,
+        currentStep: qrCurrentStep,
+        expectedRole: "mail" as UserRole,
+        createdAt: new Date().toISOString(),
+        version: "1.0"
+      }
+
+      // Create revision action
+      const revisionAction: DocumentAction = {
+        id: this.generateActionId(),
+        documentId: newDocumentId,
+        action: "create_revision",
+        performedBy: revisedBy,
+        performedAt: new Date().toISOString(),
+        newStatus: documentStatus,
+        comments: `Document revised: ${revisionReason}. Preserved ${preservedApprovals.length} approvals.`
+      }
+
+      // Create new document
+      const newDocument: Document = {
+        ...originalDocument,
+        id: newDocumentId,
+        status: documentStatus,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        approvalSteps: newApprovalSteps,
+        currentStepIndex: currentStepIndex,
+        rejectionReason: undefined,
+        revision,
+        qrData,
+        actionHistory: [revisionAction]
+      }
+
+             // Save new document directly to database
+      await DatabaseService.saveRevisionDocument(newDocument)
+
+      // Update original document status to indicate it has been revised
+      const originalUpdateAction: DocumentAction = {
+        id: this.generateActionId(),
+        documentId: originalDocumentId,
+        action: "revise",
+        performedBy: revisedBy,
+        performedAt: new Date().toISOString(),
+        previousStatus: originalDocument.status,
+        newStatus: "Cancelled",
+        comments: `Document revised as ${newDocumentId}`
+      }
+
+      const updatedOriginal: Document = {
+        ...originalDocument,
+        status: "Cancelled",
+        updatedAt: new Date().toISOString(),
+        actionHistory: [...originalDocument.actionHistory, originalUpdateAction]
+      }
+
+      await DatabaseService.updateDocument(updatedOriginal)
+
+      console.log("Revision created successfully:", newDocumentId)
+      return newDocument
+
+    } catch (error) {
+      console.error("Error creating revision:", error)
+      throw error
+    }
+  }
+
+  // Create editable revision (allows editing approvers and details)
+  static async createEditableRevision(
+    originalDocumentId: string,
+    revisionReason: string,
+    revisedBy: string,
+    newTitle?: string,
+    newDescription?: string,
+    newApprovers?: string[],
+    newApprovalMode?: ApprovalMode,
+    resetAllApprovals?: boolean
+  ): Promise<Document> {
+    console.log("Creating editable revision for document:", originalDocumentId)
+
+    try {
+      // Get the original document
+      const originalDocument = await this.getDocumentById(originalDocumentId)
+      if (!originalDocument) {
+        throw new Error("Original document not found")
+      }
+
+      // Validate that document can be revised (use same logic as canCreateRevision)
+      if (!this.canCreateRevision(originalDocument)) {
+        throw new Error("Can only create revision from rejected documents")
+      }
+
+      // Handle approval preservation based on resetAllApprovals flag
+      const preservedApprovals: PreservedApproval[] = []
+      const originalApprovedEmails = new Set<string>()
+
+      // If not resetting all approvals, preserve existing approved ones
+      if (!resetAllApprovals && originalDocument.approvalSteps) {
+        originalDocument.approvalSteps.forEach(step => {
+          if (step.status === "approved") {
+            preservedApprovals.push({
+              approverEmail: step.approverEmail,
+              approverName: step.approverName,
+              approvedAt: step.timestamp!,
+              comments: step.comments,
+              originalDocumentId: originalDocumentId,
+              preservedFromRevision: originalDocument.revision?.revisionNumber || 1
+            })
+            originalApprovedEmails.add(step.approverEmail)
+          }
+        })
+      }
+
+      // Create new approval steps
+      const finalApprovers = newApprovers || (originalDocument.approvalSteps?.map(step => step.approverEmail) || [])
+      const newApprovalSteps: ApprovalStep[] = []
+
+      for (let i = 0; i < finalApprovers.length; i++) {
+        const approverEmail = finalApprovers[i]
+        const approverUser = await this.getUserByEmail(approverEmail)
+        
+        // Check if this approver was previously approved and we're not resetting all
+        const wasApproved = !resetAllApprovals && originalApprovedEmails.has(approverEmail)
+        
+        if (wasApproved) {
+          // Preserve the approval
+          const originalApproval = preservedApprovals.find(p => p.approverEmail === approverEmail)
+          newApprovalSteps.push({
+            order: i + 1,
+            approverEmail: approverEmail,
+            approverName: originalApproval?.approverName || approverUser?.name || approverEmail,
+            status: "approved",
+            timestamp: originalApproval?.approvedAt,
+            comments: originalApproval?.comments ? 
+              `${originalApproval.comments} [Preserved from revision ${originalDocument.revision?.revisionNumber || 1}]` : 
+              `Preserved from revision ${originalDocument.revision?.revisionNumber || 1}`
+          })
+        } else {
+          // New approver or reset approval
+          newApprovalSteps.push({
+            order: i + 1,
+            approverEmail: approverEmail,
+            approverName: approverUser?.name || approverEmail,
+            status: "pending",
+            timestamp: undefined,
+            comments: undefined
+          })
+        }
+      }
+
+      // Calculate document status based on approval states
+      const finalApprovalMode = newApprovalMode || originalDocument.approvalMode || "sequential"
+      
+      // Find first pending step for currentStepIndex
+      const firstPendingIndex = newApprovalSteps.findIndex(step => step.status === "pending")
+      const allApproved = firstPendingIndex === -1
+
+      // Determine document status and current step
+      let documentStatus: DocumentStatus
+      let currentStepIndex: number
+      let qrCurrentStep: string
+
+      if (allApproved) {
+        documentStatus = "Approval Complete. Pending return to Originator"
+        currentStepIndex = newApprovalSteps.length
+        qrCurrentStep = "All Approved - Ready for Completion"
+      } else {
+        // Check if we're in sequential mode and need to wait for mail pickup
+        if (finalApprovalMode === "sequential") {
+          const approvedCount = newApprovalSteps.filter(step => step.status === "approved").length
+          if (approvedCount > 0) {
+            // There are approved steps, so mail needs to pickup for next step
+            documentStatus = "Approved by Approver. Pending pickup for next step"
+            currentStepIndex = firstPendingIndex
+            qrCurrentStep = "Approved - Ready for Pickup to Next Step"
+          } else {
+            // No approvals yet, ready for initial pickup
+            documentStatus = "Ready for Pickup"
+            currentStepIndex = 0
+            qrCurrentStep = "Ready for Pickup"
+          }
+        } else {
+          // Flexible mode - ready for pickup to any pending approver
+          documentStatus = "Ready for Pickup"
+          currentStepIndex = firstPendingIndex
+          qrCurrentStep = "Ready for Pickup"
+        }
+      }
+
+      // Create revision data
+      const revisionNumber = (originalDocument.revision?.revisionNumber || 1) + 1
+      const revision: DocumentRevision = {
+        revisionNumber,
+        originalDocumentId,
+        previousRevisionId: originalDocument.id,
+        revisionReason,
+        revisedBy,
+        revisedAt: new Date().toISOString(),
+        preservedApprovals
+      }
+
+      // Generate new document ID
+      const newDocumentId = this.generateDocumentId()
+
+      // Create new QR data
+      const qrData: QRCodeData = {
+        documentId: newDocumentId,
+        title: newTitle || originalDocument.title,
+        workflow: originalDocument.workflow,
+        currentStep: qrCurrentStep,
+        expectedRole: "mail" as UserRole,
+        createdAt: new Date().toISOString(),
+        version: "1.0"
+      }
+
+      // Create revision action
+      const revisionAction: DocumentAction = {
+        id: this.generateActionId(),
+        documentId: newDocumentId,
+        action: "create_revision",
+        performedBy: revisedBy,
+        performedAt: new Date().toISOString(),
+        newStatus: documentStatus,
+        comments: `Document revised with edits: ${revisionReason}. ${resetAllApprovals ? 'All approvals reset - all approvers must approve again' : `Preserved ${preservedApprovals.length} approvals`}. Total approvers: ${finalApprovers.length}.`
+      }
+
+      // Create new document with edits
+      const newDocument: Document = {
+        ...originalDocument,
+        id: newDocumentId,
+        title: newTitle || originalDocument.title,
+        description: newDescription || originalDocument.description,
+        status: documentStatus,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        approvalSteps: newApprovalSteps,
+        approvalMode: finalApprovalMode,
+        currentStepIndex: currentStepIndex,
+        rejectionReason: undefined,
+        revision,
+        qrData,
+        actionHistory: [revisionAction]
+      }
+
+      // Save new document directly to database
+      await DatabaseService.saveRevisionDocument(newDocument)
+
+      // Update original document status to indicate it has been revised
+      const originalUpdateAction: DocumentAction = {
+        id: this.generateActionId(),
+        documentId: originalDocumentId,
+        action: "revise",
+        performedBy: revisedBy,
+        performedAt: new Date().toISOString(),
+        previousStatus: originalDocument.status,
+        newStatus: "Cancelled",
+        comments: `Document revised with edits as ${newDocumentId}`
+      }
+
+      const updatedOriginal: Document = {
+        ...originalDocument,
+        status: "Cancelled",
+        updatedAt: new Date().toISOString(),
+        actionHistory: [...originalDocument.actionHistory, originalUpdateAction]
+      }
+
+      await DatabaseService.updateDocument(updatedOriginal)
+
+      console.log("Editable revision created successfully:", newDocumentId)
+      return newDocument
+
+    } catch (error) {
+      console.error("Error creating editable revision:", error)
+      throw error
+    }
+  }
+
+  // Get revision history for a document
+  static async getRevisionHistory(documentId: string): Promise<Document[]> {
+    const allDocuments = await this.getAllDocuments()
+    const revisionChain: Document[] = []
+
+    // Find the original document
+    let currentDoc = allDocuments.find(doc => doc.id === documentId)
+    if (!currentDoc) return []
+
+    // Follow the revision chain backwards
+    while (currentDoc) {
+      revisionChain.unshift(currentDoc)
+      
+      if (currentDoc.revision?.previousRevisionId) {
+        currentDoc = allDocuments.find(doc => doc.id === currentDoc!.revision!.previousRevisionId)
+      } else {
+        break
+      }
+    }
+
+    // Find all forward revisions
+    let latestDoc = allDocuments.find(doc => doc.id === documentId)
+    if (latestDoc) {
+      const forwardRevisions = allDocuments.filter(doc => 
+        doc.revision?.originalDocumentId === latestDoc!.revision?.originalDocumentId ||
+        doc.revision?.originalDocumentId === latestDoc!.id
+      ).sort((a, b) => (a.revision?.revisionNumber || 0) - (b.revision?.revisionNumber || 0))
+
+      // Add forward revisions that aren't already included
+      forwardRevisions.forEach(doc => {
+        if (!revisionChain.find(existing => existing.id === doc.id)) {
+          revisionChain.push(doc)
+        }
+      })
+    }
+
+    return revisionChain
+  }
+
+  // Check if document can be revised
+  static canCreateRevision(document: Document): boolean {
+    // Check if document has been rejected at some point
+    const hasBeenRejected = document.actionHistory.some(action => action.action === "reject")
+    
+    // Allow revision if:
+    // 1. Document has been rejected at some point, AND
+    // 2. Document is flow workflow, AND  
+    // 3. Document has approval steps, AND
+    // 4. Some approvers have already approved (so we can preserve approvals), AND
+    // 5. Document is not completed/cancelled/archived
+    const notFinalStatus = !["Completed and Archived", "Cancelled", "Closed"].includes(document.status)
+    
+    return hasBeenRejected && 
+           document.workflow === "flow" &&
+           !!document.approvalSteps &&
+           document.approvalSteps.some(step => step.status === "approved") &&
+           notFinalStatus
+  }
+
+  private static generateDocumentId(): string {
+    const timestamp = Date.now().toString()
+    const random = Math.random().toString(36).substring(2, 8)
+    return `DOC-${timestamp}-${random}`.toUpperCase()
+  }
+
+  // Check if mail controller should be forced to pickup
+  static shouldForcePickup(document: Document, user: User): boolean {
+    if (user.role !== "mail") return false
+    
+    // Get mail controller's action history for this document
+    const mailActions = document.actionHistory.filter(a => 
+      a.performedBy === user.email && 
+      ["pickup", "deliver"].includes(a.action)
+    )
+
+    // Get the last action by this mail controller
+    const lastMailAction = mailActions[mailActions.length - 1]
+
+    // Check if there's been an approval/rejection after the last mail action
+    const hasApprovalAfterLastMail = lastMailAction ? 
+      document.actionHistory.some(a => 
+        ["approve", "reject"].includes(a.action) && 
+        new Date(a.performedAt) > new Date(lastMailAction.performedAt)
+      ) : false
+
+    // Should force pickup if:
+    // 1. First scan ever, OR
+    // 2. There's been approval/rejection after last mail action
+    return mailActions.length === 0 || hasApprovalAfterLastMail
+  }
+
+  // Check if mail controller should be forced to deliver
+  static shouldForceDeliver(document: Document, user: User): boolean {
+    if (user.role !== "mail") return false
+    
+    // Get mail controller's action history for this document
+    const mailActions = document.actionHistory.filter(a => 
+      a.performedBy === user.email && 
+      ["pickup", "deliver"].includes(a.action)
+    )
+
+    // Get the last action by this mail controller
+    const lastMailAction = mailActions[mailActions.length - 1]
+
+    // Check if there's been an approval/rejection after the last mail action
+    const hasApprovalAfterLastMail = lastMailAction ? 
+      document.actionHistory.some(a => 
+        ["approve", "reject"].includes(a.action) && 
+        new Date(a.performedAt) > new Date(lastMailAction.performedAt)
+      ) : false
+
+    // Should force deliver if last action was pickup and no approval yet
+    return lastMailAction?.action === "pickup" && !hasApprovalAfterLastMail
+  }
+
+  // Get available actions for user on document
+  static getAvailableActions(document: Document, user: User): ActionType[] {
+    const availableActions: ActionType[] = []
+
+    if (user.role === "mail") {
+      // Determine which action should be forced
+      if (this.shouldForcePickup(document, user)) {
+        return ["pickup"]
+      } else if (this.shouldForceDeliver(document, user)) {
+        return ["deliver"]
+      } else {
+        // This shouldn't happen with current logic, but fallback
+        return ["pickup", "deliver"]
+      }
+    }
+
+    if (user.role === "approver") {
+      return ["receive", "approve", "reject"]
+    }
+
+    if (user.role === "recipient") {
+      return ["receive"]
+    }
+
+    if (user.role === "admin") {
+      return ["close", "cancel"]
+    }
+
+    return availableActions
   }
 }
 
