@@ -2,6 +2,7 @@ import {
   Document, 
   DocumentAction, 
   DocumentStatus, 
+  DocumentStatusNew,
   User, 
   UserRole, 
   WorkflowType,
@@ -101,7 +102,7 @@ export class DatabaseService {
   }
 
   // Convert Document object to database row
-  private static mapDocumentToRow(document: Document): Database['public']['Tables']['documents']['Insert'] {
+  private static mapDocumentToRow(document: Document): any {
     return {
       id: document.id,
       title: document.title,
@@ -109,6 +110,8 @@ export class DatabaseService {
       description: document.description,
       workflow: document.workflow,
       status: document.status,
+      document_status: document.documentStatus,  // Map dual status
+      tracking_status: document.trackingStatus,  // Map dual status
       created_at: document.createdAt,
       updated_at: document.updatedAt,
       created_by: document.createdBy,
@@ -116,10 +119,10 @@ export class DatabaseService {
       recipient: document.recipient,
       rejection_reason: document.rejectionReason,
       approval_mode: document.approvalMode,
-      revision_data: document.revision as unknown as Database['public']['Tables']['documents']['Insert']['revision_data'],
-      qr_data: document.qrData as unknown as Database['public']['Tables']['documents']['Insert']['qr_data'],
-      approval_steps: document.approvalSteps as unknown as Database['public']['Tables']['documents']['Insert']['approval_steps'],
-      action_history: document.actionHistory as unknown as Database['public']['Tables']['documents']['Insert']['action_history']
+      revision_data: document.revision as unknown as any,
+      qr_data: document.qrData as unknown as any,
+      approval_steps: document.approvalSteps as unknown as any,
+      action_history: document.actionHistory as unknown as any
     }
   }
 
@@ -175,13 +178,13 @@ export class DatabaseService {
       action: "created",
       performedBy: createdBy,
       performedAt: now,
-              newStatus: "Ready for Pick-up (Drop Off)",
-      comments: "Document workflow initiated"
+      newStatus: "NEW",
+      comments: "Document created - awaiting delivery method selection"
     }
 
-    // Set initial dual status
-    const initialStatus: DocumentStatus = "Ready for Pick-up (Drop Off)"
-    const dualStatus = convertLegacyToDualStatus(initialStatus)
+    // Set initial dual status - NEW status should have no tracking status yet
+    const initialStatus: DocumentStatus = "NEW"
+    // Don't set dual status yet - admin needs to choose delivery method first
 
     const document: Document = {
       id: docId,
@@ -190,8 +193,8 @@ export class DatabaseService {
       description,
       workflow,
       status: initialStatus,
-      documentStatus: dualStatus.documentStatus,
-      trackingStatus: dualStatus.trackingStatus,
+      documentStatus: "NEW" as DocumentStatusNew,      // Set to NEW for proper display
+      trackingStatus: undefined,  // Will be set when admin chooses delivery method
       createdAt: now,
       createdBy,
       createdByDropOffLocation,

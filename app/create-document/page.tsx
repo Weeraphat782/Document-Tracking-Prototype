@@ -251,11 +251,11 @@ function CreateDocumentContent() {
         )
       } else {
         document = await EnhancedDocumentService.createDocument(
-          title.trim(),
-          selectedTemplate,
+        title.trim(),
+        selectedTemplate,
           "flow" as WorkflowType,
-          user.email,
-          description.trim() || undefined,
+        user.email,
+        description.trim() || undefined,
           approvers,
           undefined,
           approvalMode
@@ -349,15 +349,15 @@ function CreateDocumentContent() {
 
         {/* Step 1: Document Information */}
         {currentStep === 1 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <FileText className="h-5 w-5 mr-2" />
-                Document Information
-              </CardTitle>
-              <CardDescription>Basic details about the document</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <FileText className="h-5 w-5 mr-2" />
+                  Document Information
+                </CardTitle>
+                <CardDescription>Basic details about the document</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
               {/* Revision Reason - only show for revisions */}
               {isRevision && (
                 <div className="space-y-3 p-4 bg-orange-50 border border-orange-200 rounded-lg">
@@ -389,86 +389,86 @@ function CreateDocumentContent() {
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="title">Document Title *</Label>
-                <Input
-                  id="title"
-                  placeholder="Enter a descriptive title for the document"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="title">Document Title *</Label>
+                  <Input
+                    id="title"
+                    placeholder="Enter a descriptive title for the document"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="template">Document Template *</Label>
-                <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a document template" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {templates.map((template) => (
-                      <SelectItem key={template.id} value={template.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{template.name}</span>
-                          <Badge variant="outline" className="ml-2">
-                            {template.category}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedTemplate && (
-                  <div className="mt-2 p-3 bg-blue-50 rounded-md">
-                    <p className="text-sm text-blue-800">
-                      <strong>Template:</strong> {getSelectedTemplate()?.name}
-                    </p>
-                    <p className="text-sm text-blue-600">
-                      <strong>Category:</strong> {getSelectedTemplate()?.category}
-                    </p>
-                  </div>
-                )}
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="template">Document Template *</Label>
+                  <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a document template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          <div className="flex items-center justify-between w-full">
+                            <span>{template.name}</span>
+                            <Badge variant="outline" className="ml-2">
+                              {template.category}
+                            </Badge>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedTemplate && (
+                    <div className="mt-2 p-3 bg-blue-50 rounded-md">
+                      <p className="text-sm text-blue-800">
+                        <strong>Template:</strong> {getSelectedTemplate()?.name}
+                      </p>
+                      <p className="text-sm text-blue-600">
+                        <strong>Category:</strong> {getSelectedTemplate()?.category}
+                      </p>
+                    </div>
+                  )}
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="description">Description (Optional)</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Additional notes, special instructions, or context"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description (Optional)</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Additional notes, special instructions, or context"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                  />
+                </div>
 
               <div className="flex justify-end pt-4">
                 <Button onClick={handleNextStep}>
                   Next
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
         )}
 
         {/* Step 2: Select Users */}
         {currentStep === 2 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Users className="h-5 w-5 mr-2" />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Users className="h-5 w-5 mr-2" />
                 Select Users
-              </CardTitle>
+                </CardTitle>
               <CardDescription>Add approvers in the order they should review the document</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </CardHeader>
+              <CardContent className="space-y-4">
               {/* Show approval status for revision */}
               {isRevision && originalDocument && (approvedApprovers.length > 0 || rejectedApprovers.length > 0) && (
                 <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center space-x-2">
                     <Info className="h-5 w-5 text-blue-600" />
                     <h4 className="font-medium text-blue-800">Previous Approval Status</h4>
-                  </div>
-                  
+                </div>
+
                   {approvedApprovers.length > 0 && (
                     <div>
                       <p className="text-sm font-medium text-green-700 mb-2">✅ Already Approved ({approvedApprovers.length})</p>
@@ -522,7 +522,7 @@ function CreateDocumentContent() {
                       }
                     </p>
                   </div>
-                </div>
+                              </div>
               )}
 
               <div className="space-y-4">
@@ -538,13 +538,13 @@ function CreateDocumentContent() {
                         onChange={(e) => setApprovers([e.target.value])}
                         className="flex-1"
                       />
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                         disabled
-                      >
+                                >
                         <X className="h-4 w-4" />
-                      </Button>
+                                </Button>
                     </div>
                   ) : (
                     approvers.map((email, index) => {
@@ -571,19 +571,19 @@ function CreateDocumentContent() {
                               </div>
                             )}
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                             onClick={() => removeApprover(index)}
                             disabled={approvers.length === 1}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
                         </div>
                       )
                     })
-                  )}
-                </div>
+                    )}
+                  </div>
 
                 <Button 
                   variant="outline" 
@@ -605,60 +605,60 @@ function CreateDocumentContent() {
                 >
                   {isSubmitting ? "Creating..." : "Create Document"}
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  </div>
+              </CardContent>
+            </Card>
         )}
 
         {/* Step 3: Preview Cover Sheet */}
         {currentStep === 3 && createdDocument && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <CheckCircle className="h-5 w-5 mr-2" />
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <CheckCircle className="h-5 w-5 mr-2" />
                 Document Created Successfully
-              </CardTitle>
+                </CardTitle>
               <CardDescription>Preview your document details and generate cover sheet</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </CardHeader>
+              <CardContent className="space-y-4">
               <div className="space-y-3 p-4 bg-green-50 rounded-lg">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Document ID</p>
                   <p className="text-sm font-mono">{createdDocument.id}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Title</p>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Title</p>
                   <p className="text-sm">{createdDocument.title}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Template</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Template</p>
                   <p className="text-sm">{getSelectedTemplate()?.name}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-gray-600">Status</p>
                   <p className="text-sm">{createdDocument.status}</p>
-                </div>
-                {approvers.length > 0 && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Approvers ({approvers.length})</p>
-                    <div className="space-y-1">
-                      {approvers.map((approver, index) => (
-                        <p key={approver} className="text-xs">
-                          {index + 1}. {approver}
-                        </p>
-                      ))}
-                    </div>
                   </div>
-                )}
-              </div>
+                {approvers.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">Approvers ({approvers.length})</p>
+                      <div className="space-y-1">
+                        {approvers.map((approver, index) => (
+                          <p key={approver} className="text-xs">
+                            {index + 1}. {approver}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
               <div className="flex justify-end pt-4">
                 <Button onClick={handleGenerateCoverSheet}>
                   Generate Cover Sheet
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
         )}
       </main>
     </div>

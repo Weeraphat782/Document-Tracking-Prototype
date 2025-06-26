@@ -15,6 +15,7 @@ export type WorkflowType = "flow" | "drop"
 // NEW: Dual Status System
 // Document Status - represents the approval/business state of the document
 export type DocumentStatusNew = 
+  | "NEW"             // Document just created, awaiting delivery method selection
   | "ACTIVE"          // Document is in active workflow (includes draft, approved steps)
   | "REJECTED"        // Document has been rejected
   | "COMPLETED"       // Document workflow is complete
@@ -32,6 +33,8 @@ export type TrackingStatus =
   | "HAND_TO_HAND_PENDING" // Hand-to-hand delivery pending confirmation
   | "FINAL_APPROVAL_PENDING" // Final approver hand-to-hand pending admin closure
   | "REJECTED_RETURNED"   // Rejected document returned to originator
+  | "CANCELLED_ROUTE"     // Document workflow cancelled
+  | "COMPLETED_ROUTE"     // Document workflow completed
 
 // Legacy Document status types (for backward compatibility)
 export type DocumentStatus = 
@@ -43,6 +46,7 @@ export type DocumentStatus =
   | "Delivered (User)"
   | "Delivered (Hand to Hand)"
   | "Final Approval - Hand to Hand"
+  | "Final Approval - Delivered to Originator"
   | "Received (User)"
   | "Approved by Approver. Pending pickup for next step"
   | "Approval Complete. Pending return to Originator"
@@ -314,8 +318,8 @@ export interface StatusDisplay {
 // Status mapping from legacy to new dual status system
 export const LEGACY_TO_DUAL_STATUS_MAP: Record<DocumentStatus, StatusMapping> = {
   "NEW": {
-    documentStatus: "ACTIVE",
-    trackingStatus: "PENDING_PICKUP"
+    documentStatus: "NEW",
+    trackingStatus: undefined as any
   },
   "Ready for Pick-up (Drop Off)": {
     documentStatus: "ACTIVE",
@@ -345,6 +349,10 @@ export const LEGACY_TO_DUAL_STATUS_MAP: Record<DocumentStatus, StatusMapping> = 
     documentStatus: "ACTIVE",
     trackingStatus: "FINAL_APPROVAL_PENDING"
   },
+  "Final Approval - Delivered to Originator": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "FINAL_APPROVAL_PENDING"
+  },
   "Received (User)": {
     documentStatus: "ACTIVE",
     trackingStatus: "RECEIVED"
@@ -359,11 +367,11 @@ export const LEGACY_TO_DUAL_STATUS_MAP: Record<DocumentStatus, StatusMapping> = 
   },
   "COMPLETED ROUTE": {
     documentStatus: "COMPLETED",
-    trackingStatus: "RECEIVED"
+    trackingStatus: "COMPLETED_ROUTE"
   },
   "CANCELLED ROUTE": {
     documentStatus: "CANCELLED",
-    trackingStatus: "RECEIVED"
+    trackingStatus: "CANCELLED_ROUTE"
   },
   "REJECTED ROUTE": {
     documentStatus: "REJECTED",
@@ -389,6 +397,11 @@ export const LEGACY_TO_DUAL_STATUS_MAP: Record<DocumentStatus, StatusMapping> = 
 
 // Display configurations for new status system
 export const DOCUMENT_STATUS_DISPLAY: Record<DocumentStatusNew, StatusDisplay> = {
+  "NEW": {
+    text: "New",
+    color: "bg-purple-500",
+    icon: "📄"
+  },
   "ACTIVE": {
     text: "Active",
     color: "bg-blue-500",
@@ -461,6 +474,16 @@ export const TRACKING_STATUS_DISPLAY: Record<TrackingStatus, StatusDisplay> = {
     text: "Rejected - Returned to Originator",
     color: "bg-red-600",
     icon: "🔙"
+  },
+  "CANCELLED_ROUTE": {
+    text: "Cancelled Route",
+    color: "bg-gray-600",
+    icon: "🚫"
+  },
+  "COMPLETED_ROUTE": {
+    text: "Completed Route",
+    color: "bg-emerald-600",
+    icon: "🏁"
   }
 }
 
@@ -473,6 +496,14 @@ export const convertLegacyToDualStatus = (legacyStatus: DocumentStatus): StatusM
 }
 
 export const getDualStatusFromDocument = (document: Document): StatusMapping => {
+  // Special handling for NEW status - always show as NEW with no tracking status
+  if (document.status === "NEW" || document.documentStatus === "NEW") {
+    return {
+      documentStatus: "NEW",           // Show as "New"
+      trackingStatus: undefined as any // Will show as blank
+    }
+  }
+  
   // If dual status is already set, use it
   if (document.documentStatus && document.trackingStatus) {
     return {

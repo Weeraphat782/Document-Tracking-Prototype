@@ -281,14 +281,14 @@ export default function ScanQR() {
           setDropOffLocation(location)
         }
         
-        toast({
-          title: "Document Found",
+      toast({
+        title: "Document Found",
           description: `Document ${document.id} loaded successfully`,
-        })
-      } else {
-        toast({
+      })
+    } else {
+      toast({
           title: "Document Not Found",
-          description: "Please check the document ID and try again",
+        description: "Please check the document ID and try again",
           variant: "destructive",
         })
       }

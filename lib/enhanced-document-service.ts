@@ -347,7 +347,17 @@ export class EnhancedDocumentService {
           if (document.status === "In Transit - Rejected Document") {
             newStatus = deliveryMethod === "hand_to_hand" ? "REJECTED - Hand to Hand" : "REJECTED - Returned to Originator"
           } else {
-            newStatus = deliveryMethod === "hand_to_hand" ? "Delivered (Hand to Hand)" : "Delivered (Drop Off)"
+            // Check if this is final approval delivery (all approvers have approved)
+            const isFinalApproval = document.workflow === "flow" && document.approvalSteps && 
+              document.approvalSteps.every(step => step.status === "approved")
+            
+            if (isFinalApproval) {
+              // Final approval delivery - should show as pending admin closure
+              newStatus = deliveryMethod === "hand_to_hand" ? "Final Approval - Hand to Hand" : "Final Approval - Delivered to Originator"
+            } else {
+              // Regular delivery to approver or recipient
+              newStatus = deliveryMethod === "hand_to_hand" ? "Delivered (Hand to Hand)" : "Delivered (Drop Off)"
+            }
           }
           break
         case "receive":
@@ -486,6 +496,7 @@ export class EnhancedDocumentService {
       "Delivered (User)": { text: "Delivered (User)", color: "bg-indigo-600 text-white font-semibold", icon: "user-check" },
       "Delivered (Hand to Hand)": { text: "Delivered (Hand to Hand) - Awaiting Confirmation", color: "bg-indigo-500 text-white font-semibold", icon: "hand" },
       "Final Approval - Hand to Hand": { text: "Final Approval - Ready to Close", color: "bg-green-500 text-white font-semibold", icon: "check-hand" },
+      "Final Approval - Delivered to Originator": { text: "Final Approval - Ready to Close", color: "bg-green-500 text-white font-semibold", icon: "check-circle" },
       "Received (User)": { text: "Received (User)", color: "bg-orange-600 text-white font-semibold", icon: "clock" },
       "Approved by Approver. Pending pickup for next step": { text: "Approved - Ready for Drop-off", color: "bg-green-600 text-white font-semibold", icon: "check" },
       "Approval Complete. Pending return to Originator": { text: "Approved - Returning", color: "bg-emerald-600 text-white font-semibold", icon: "check-double" },

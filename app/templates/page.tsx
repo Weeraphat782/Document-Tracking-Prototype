@@ -132,29 +132,29 @@ export default function TemplatesPage() {
 
   return (
     <SidebarLayout>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
-          <div className="flex items-center justify-between max-w-7xl mx-auto">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-semibold text-gray-900">Document Templates</h1>
-            </div>
-            <div className="flex items-center space-x-2">
-              <Badge variant="outline">{templates.length} Templates</Badge>
-              {user.role === "admin" && (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
+        <div className="flex items-center justify-between max-w-7xl mx-auto">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-xl font-semibold text-gray-900">Document Templates</h1>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Badge variant="outline">{templates.length} Templates</Badge>
+            {user.role === "admin" && (
                 <Link href="/templates/create">
                   <Button>
                     <Plus className="w-4 h-4 mr-2" />
                     Create Template
                   </Button>
                 </Link>
-              )}
-            </div>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* Content */}
-        <div className="max-w-7xl mx-auto px-4 py-6">
+      {/* Content */}
+      <div className="max-w-7xl mx-auto px-4 py-6">
         {templates.length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">
@@ -169,9 +169,9 @@ export default function TemplatesPage() {
               {user.role === "admin" && (
                 <Link href="/templates/create">
                   <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Template
-                  </Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Template
+                </Button>
                 </Link>
               )}
             </CardContent>
@@ -185,8 +185,8 @@ export default function TemplatesPage() {
                   <Settings className="h-4 w-4 mr-2" />
                   FILTER
                 </Button>
-              </div>
-            </div>
+                    </div>
+                  </div>
 
             {/* Table Content */}
             <div className="overflow-x-auto">
@@ -213,31 +213,31 @@ export default function TemplatesPage() {
                           {template.description && (
                             <div className="text-xs text-gray-500 mt-1 truncate max-w-32 sm:max-w-none">
                               {template.description}
-                            </div>
+                    </div>
                           )}
-                        </div>
+                    </div>
                       </td>
                       <td className="hidden md:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{template.category}</td>
                       <td className="hidden lg:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{template.templateFields.length}</td>
                       <td className="hidden lg:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{template.usageCount || 0}</td>
                       <td className="hidden sm:table-cell px-2 sm:px-4 py-4 whitespace-nowrap">
-                        <Badge variant={template.isPublic ? "default" : "outline"} className="text-xs">
-                          {template.isPublic ? "Public" : "Private"}
-                        </Badge>
+                      <Badge variant={template.isPublic ? "default" : "outline"} className="text-xs">
+                        {template.isPublic ? "Public" : "Private"}
+                      </Badge>
                       </td>
                       <td className="hidden sm:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                         {new Date(template.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-2 sm:px-4 py-4 whitespace-nowrap text-sm">
                         <div className="flex flex-wrap items-center gap-1">
-                          <Button 
+                        <Button 
                             variant="outline" 
-                            size="sm"
-                            onClick={() => openViewDialog(template)}
+                          size="sm"
+                          onClick={() => openViewDialog(template)}
                             className="p-1 sm:p-2"
-                          >
+                        >
                             <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
-                          </Button>
+                        </Button>
                           <Button 
                             variant="outline" 
                             size="sm"
@@ -257,30 +257,30 @@ export default function TemplatesPage() {
                                   <Edit className="w-3 h-3 sm:w-4 sm:h-4" />
                                 </Button>
                               </Link>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
                                   <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 p-1 sm:p-2">
                                     <Trash2 className="w-3 h-3 sm:w-4 sm:h-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Template</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Are you sure you want to delete "{template.name}"? This action cannot be undone.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction 
-                                      onClick={() => handleDeleteTemplate(template.id)}
-                                      className="bg-red-600 hover:bg-red-700"
-                                    >
-                                      Delete
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Template</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{template.name}"? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={() => handleDeleteTemplate(template.id)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                             </>
                           )}
                         </div>
@@ -326,8 +326,8 @@ export default function TemplatesPage() {
                     Next
                   </Button>
                 </div>
-              </div>
-            </div>
+                    </div>
+                  </div>
           </div>
         )}
       </div>
@@ -400,7 +400,7 @@ export default function TemplatesPage() {
           )}
         </DialogContent>
       </Dialog>
-      </div>
+    </div>
     </SidebarLayout>
   )
 }

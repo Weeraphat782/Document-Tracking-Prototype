@@ -7,12 +7,14 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FileText, Plus, QrCode, Clock, CheckCircle, XCircle, Truck, Package, Users, User, AlertCircle, History, Trash2, Filter, Search, Activity, Archive, Download, Eye, FileImage, Edit, X, RotateCcw, CheckSquare } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
-import { Document, User as UserType, getDualStatusFromDocument, DOCUMENT_STATUS_DISPLAY, TRACKING_STATUS_DISPLAY } from "@/lib/types"
+import { DatabaseService } from "@/lib/database-service"
+import { Document, User as UserType, getDualStatusFromDocument, DOCUMENT_STATUS_DISPLAY, TRACKING_STATUS_DISPLAY, convertLegacyToDualStatus, ActionType, DocumentStatus } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import SidebarLayout from "@/components/sidebar-layout"
 
@@ -29,6 +31,8 @@ export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(10)
   const [activeTab, setActiveTab] = useState("active")
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
+  const [showDeliveryDialog, setShowDeliveryDialog] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -122,7 +126,7 @@ export default function Dashboard() {
   // Separate documents into active and history based on status
   const separateDocuments = (docs: Document[]) => {
     const activeStatuses = [
-      "NEW",
+      "NEW",  // Document created, awaiting delivery method selection
       "Ready for Pick-up (Drop Off)",
       "In Transit (Mail Controller)", 
       "In Transit - Rejected Document",
@@ -130,6 +134,7 @@ export default function Dashboard() {
       "Delivered (User)",
       "Delivered (Hand to Hand)",
       "Final Approval - Hand to Hand",
+      "Final Approval - Delivered to Originator",  // Admin can close this
       "Received (User)",
       "Approved by Approver. Pending pickup for next step",
       "Approval Complete. Pending return to Originator",
@@ -168,13 +173,24 @@ export default function Dashboard() {
   // NEW: Functions for dual status display
   const getDualStatusDisplay = (document: Document) => {
     const dualStatus = getDualStatusFromDocument(document)
+    
     return {
-      documentStatus: DOCUMENT_STATUS_DISPLAY[dualStatus.documentStatus],
-      trackingStatus: TRACKING_STATUS_DISPLAY[dualStatus.trackingStatus]
+      documentStatus: dualStatus.documentStatus ? DOCUMENT_STATUS_DISPLAY[dualStatus.documentStatus] : null,
+      trackingStatus: dualStatus.trackingStatus ? TRACKING_STATUS_DISPLAY[dualStatus.trackingStatus] : null
     }
   }
 
   const renderStatusBadge = (display: any, type: 'document' | 'tracking') => {
+    // Handle undefined/null status (for NEW documents)
+    if (!display || display.text === undefined) {
+      return (
+        <Badge className="bg-gray-300 text-xs text-gray-600">
+          <span className="mr-1">⏸️</span>
+          <span className="hidden sm:inline">Not Set</span>
+        </Badge>
+      )
+    }
+    
     return (
       <Badge className={`${display.color} text-xs text-white`}>
         <span className="mr-1">{display.icon}</span>
@@ -350,8 +366,28 @@ export default function Dashboard() {
         </Link>
       )
 
-      if (document.status === "Delivered (User)" || 
-          document.status === "COMPLETED ROUTE") {
+      // Check if document is ready to be closed
+      const canCloseWorkflow = () => {
+        // Always allow closing for these statuses
+        if (document.status === "Delivered (User)" || 
+            document.status === "COMPLETED ROUTE" ||
+            document.status === "Final Approval - Hand to Hand" ||
+            document.status === "Final Approval - Delivered to Originator") {
+          return true
+        }
+        
+        // For "Delivered (Drop Off)", check if all approvals are complete
+        if (document.status === "Delivered (Drop Off)" && 
+            document.workflow === "flow" && 
+            document.approvalSteps) {
+          const allApproved = document.approvalSteps.every(step => step.status === "approved")
+          return allApproved
+        }
+        
+        return false
+      }
+
+      if (canCloseWorkflow()) {
         actions.push(
           <Button
             key="close"
@@ -361,6 +397,22 @@ export default function Dashboard() {
             title="Close Workflow"
           >
             <CheckSquare className="h-4 w-4" />
+          </Button>
+        )
+      }
+
+      // Admin can select delivery method for NEW documents
+      if (document.status === "NEW") {
+        actions.push(
+          <Button
+            key="delivery-method"
+            variant="outline"
+            size="sm"
+            onClick={() => handleSelectDeliveryMethod(document.id)}
+            className="text-blue-600 hover:text-blue-700"
+            title="Select Delivery Method"
+          >
+            <Truck className="h-4 w-4" />
           </Button>
         )
       }
@@ -546,6 +598,148 @@ export default function Dashboard() {
     router.push(`/create-document?revisionOf=${documentId}`)
   }
 
+  // Handle checkbox selection
+  const handleSelectDocument = (documentId: string) => {
+    setSelectedDocuments(prev => {
+      if (prev.includes(documentId)) {
+        return prev.filter(id => id !== documentId)
+      } else {
+        return [...prev, documentId]
+      }
+    })
+  }
+
+  // Handle select all checkbox
+  const handleSelectAll = () => {
+    const newDocuments = getCurrentDocuments().filter(doc => doc.status === "NEW")
+    if (selectedDocuments.length === newDocuments.length) {
+      setSelectedDocuments([])
+    } else {
+      setSelectedDocuments(newDocuments.map(doc => doc.id))
+    }
+  }
+
+  // Handle bulk delivery method selection
+  const handleBulkDeliveryMethod = () => {
+    if (selectedDocuments.length === 0) {
+      toast({
+        title: "No Documents Selected",
+        description: "Please select documents to send",
+        variant: "destructive"
+      })
+      return
+    }
+    setShowDeliveryDialog(true)
+  }
+
+  const handleDeliveryMethodConfirm = async (deliveryMethod: "mail_controller" | "hand_to_hand") => {
+    try {
+      const selectedCount = selectedDocuments.length
+      for (const docId of selectedDocuments) {
+        await handleSelectDeliveryMethod(docId, deliveryMethod)
+      }
+      
+      setSelectedDocuments([]) // Clear selection
+      setShowDeliveryDialog(false)
+      toast({
+        title: "Bulk Delivery Method Set",
+        description: `${selectedCount} documents updated successfully`,
+      })
+    } catch (error) {
+      console.error("Error setting bulk delivery method:", error)
+      toast({
+        title: "Error",
+        description: "Failed to set delivery method for some documents",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleSelectDeliveryMethod = async (documentId: string, method?: "mail_controller" | "hand_to_hand") => {
+    // Use provided method or show dialog to select delivery method
+    const deliveryMethod = method || (window.confirm(
+      "Select delivery method:\n\nOK = Mail Controller Pickup\nCancel = Hand-to-Hand Delivery"
+    ) ? "mail_controller" : "hand_to_hand")
+
+    try {
+      const document = await EnhancedDocumentService.getDocumentById(documentId)
+      if (!document) {
+        throw new Error("Document not found")
+      }
+
+      if (deliveryMethod === "mail_controller") {
+        // Update document status for mail controller pickup
+        document.status = "Ready for Pick-up (Drop Off)"
+        const dualStatus = convertLegacyToDualStatus(document.status)
+        document.documentStatus = dualStatus.documentStatus
+        document.trackingStatus = dualStatus.trackingStatus
+        
+        // Add action to history
+        const actionRecord = {
+          id: Date.now().toString(),
+          documentId: document.id,
+          action: "created" as ActionType,
+          performedBy: user!.email,
+          performedAt: new Date().toISOString(),
+          previousStatus: "NEW" as DocumentStatus,
+          newStatus: "Ready for Pick-up (Drop Off)" as DocumentStatus,
+          comments: "Delivery method selected: Mail Controller",
+          previousDocumentStatus: undefined,
+          newDocumentStatus: dualStatus.documentStatus,
+          previousTrackingStatus: undefined,
+          newTrackingStatus: dualStatus.trackingStatus
+        }
+        document.actionHistory.push(actionRecord)
+      } else {
+        // Hand-to-hand delivery - deliver directly to first approver
+        if (document.workflow === "flow" && document.approvalSteps && document.approvalSteps.length > 0) {
+          document.status = "Delivered (Hand to Hand)"
+          const dualStatus = convertLegacyToDualStatus(document.status)
+          document.documentStatus = dualStatus.documentStatus
+          document.trackingStatus = dualStatus.trackingStatus
+          
+          // Add action to history
+          const actionRecord = {
+            id: Date.now().toString(),
+            documentId: document.id,
+            action: "deliver" as ActionType,
+            performedBy: user!.email,
+            performedAt: new Date().toISOString(),
+            previousStatus: "NEW" as DocumentStatus,
+            newStatus: "Delivered (Hand to Hand)" as DocumentStatus,
+            comments: "Delivery method selected: Hand-to-Hand - Delivered to first approver",
+            deliveryMethod: "hand_to_hand" as "hand_to_hand",
+            previousDocumentStatus: undefined,
+            newDocumentStatus: dualStatus.documentStatus,
+            previousTrackingStatus: undefined,
+            newTrackingStatus: dualStatus.trackingStatus
+          }
+          document.actionHistory.push(actionRecord)
+        } else {
+          throw new Error("Hand-to-hand delivery requires approval workflow")
+        }
+      }
+
+      // Update in database
+      await DatabaseService.updateDocument(document)
+
+      toast({
+        title: "Delivery Method Selected",
+        description: `Document is now ready for ${deliveryMethod === "mail_controller" ? "mail controller pickup" : "hand-to-hand delivery"}`,
+      })
+      
+      // Refresh documents
+      loadDocuments(user!)
+    } catch (error) {
+      console.error("Error selecting delivery method:", error)
+      toast({
+        title: "Error",
+        description: "Failed to select delivery method",
+        variant: "destructive"
+      })
+    }
+  }
+
   const getWorkflowInfo = (document: Document) => {
     if (document.workflow === "flow" && document.approvalSteps) {
       const currentStep = document.approvalSteps[document.currentStepIndex || 0]
@@ -613,6 +807,126 @@ export default function Dashboard() {
     }
 
     return null
+  }
+
+  // Get current location based on document status
+  const getCurrentLocation = (document: Document) => {
+    // Sample locations for demonstration (matching the image data)
+    const sampleLocations: { [key: string]: string } = {
+      "admin@company.com": "Building A, Floor 2, Room 201",
+      "manager@company.com": "Building B, Floor 3, Executive Suite",
+      "View": "Building C, Floor 1, Reception Desk",
+      "Tawan": "Building A, Floor 4, IT Department",
+      "Muk": "Building B, Floor 2, HR Department", 
+      "Shivek": "Building C, Floor 3, Finance Department"
+    }
+
+    // Determine current location based on status
+    switch (document.status) {
+      case "NEW":
+        // Document just created, awaiting delivery method selection
+        const newCreatorName = document.createdBy.split('@')[0]
+        const newCreatorLocation = sampleLocations[document.createdBy] || sampleLocations[newCreatorName] || "Building A, Floor 2, Room 201"
+        return {
+          user: newCreatorName,
+          location: newCreatorLocation,
+          status: "Awaiting delivery method selection"
+        }
+        
+      case "Ready for Pick-up (Drop Off)":
+      case "REJECTED - Ready for Pickup":
+        // Document is with creator
+        const creatorName = document.createdBy.split('@')[0]
+        const creatorLocation = sampleLocations[document.createdBy] || sampleLocations[creatorName] || "Building A, Floor 2, Room 201"
+        return {
+          user: creatorName,
+          location: creatorLocation,
+          status: "With Creator"
+        }
+      
+      case "In Transit (Mail Controller)":
+      case "In Transit - Rejected Document":
+        return {
+          user: "Mail Controller",
+          location: "In Transit Vehicle",
+          status: "In Transit"
+        }
+      
+      case "Delivered (Drop Off)":
+      case "Delivered (Hand to Hand)":
+      case "Received (User)":
+        // Find current approver or recipient
+        if (document.workflow === "flow" && document.approvalSteps) {
+          const currentStep = document.approvalSteps[document.currentStepIndex || 0]
+          if (currentStep && currentStep.status === "pending") {
+            const approverName = currentStep.approverName || currentStep.approverEmail.split('@')[0]
+            const location = sampleLocations[approverName] || sampleLocations[currentStep.approverEmail] || "Office Location"
+            return {
+              user: approverName,
+              location: location,
+              status: "With Approver"
+            }
+          }
+          // If no pending step, check for current delivery destination
+          const lastPendingStep = document.approvalSteps.find(step => step.status === "pending")
+          if (lastPendingStep) {
+            const approverName = lastPendingStep.approverName || lastPendingStep.approverEmail.split('@')[0]
+            const location = sampleLocations[approverName] || sampleLocations[lastPendingStep.approverEmail] || "Office Location"
+            return {
+              user: approverName,
+              location: location,
+              status: "Current delivery destination"
+            }
+          }
+        }
+        // For drop workflow
+        const recipientName = document.recipient?.split('@')[0] || "Recipient"
+        return {
+          user: recipientName,
+          location: sampleLocations[recipientName] || "Office Location",
+          status: "With Recipient"
+        }
+      
+      case "Final Approval - Hand to Hand":
+      case "Final Approval - Delivered to Originator":
+      case "REJECTED - Returned to Originator":
+        // Back with creator
+        const finalCreatorName = document.createdBy.split('@')[0]
+        const finalLocation = sampleLocations[document.createdBy] || sampleLocations[finalCreatorName] || "Building A, Floor 2, Room 201"
+        return {
+          user: finalCreatorName,
+          location: finalLocation,
+          status: "With Creator"
+        }
+      
+      case "COMPLETED ROUTE":
+      case "CANCELLED ROUTE":
+        return {
+          user: "Archive",
+          location: "Document Archive System",
+          status: "Archived"
+        }
+      
+      default:
+        // Try to find current approver
+        if (document.workflow === "flow" && document.approvalSteps) {
+          const currentStep = document.approvalSteps[document.currentStepIndex || 0]
+          if (currentStep) {
+            const approverName = currentStep.approverName || currentStep.approverEmail.split('@')[0]
+            const location = sampleLocations[approverName] || sampleLocations[currentStep.approverEmail] || "Office Location"
+            return {
+              user: approverName,
+              location: location,
+              status: "Processing"
+            }
+          }
+        }
+        return {
+          user: "System",
+          location: "Processing Queue",
+          status: "Processing"
+        }
+    }
   }
 
   const getDocumentDescription = () => {
@@ -686,11 +1000,22 @@ export default function Dashboard() {
               <table className="w-full min-w-full">
                 <thead className="bg-gray-50">
                   <tr className="border-b border-gray-200">
+                    {user?.role === "admin" && (
+                      <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">
+                        <input
+                          type="checkbox"
+                          className="rounded border-gray-300"
+                          checked={selectedDocuments.length > 0 && selectedDocuments.length === getCurrentDocuments().filter(doc => doc.status === "NEW").length}
+                          onChange={handleSelectAll}
+                        />
+                      </th>
+                    )}
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sr.</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document ID</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document Status</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracking Status</th>
+                    <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Location</th>
                     <th className="hidden md:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                     <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workflow</th>
                     <th className="hidden sm:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
@@ -701,9 +1026,24 @@ export default function Dashboard() {
                   {currentDocuments.map((doc, index) => {
                     const workflowInfo = getWorkflowInfo(doc)
                     const dualStatusDisplay = getDualStatusDisplay(doc)
+                    const currentLocation = getCurrentLocation(doc)
                     const srNo = startIndex + index + 1
                     return (
                       <tr key={doc.id} className="hover:bg-gray-50">
+                        {user?.role === "admin" && (
+                          <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
+                            {doc.status === "NEW" ? (
+                              <input
+                                type="checkbox"
+                                className="rounded border-gray-300"
+                                checked={selectedDocuments.includes(doc.id)}
+                                onChange={() => handleSelectDocument(doc.id)}
+                              />
+                            ) : (
+                              <div className="w-4 h-4"></div>
+                            )}
+                          </td>
+                        )}
                         <td className="px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{srNo}</td>
                         <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
                           <div className="text-xs sm:text-sm font-medium text-blue-600 break-all">{doc.id}</div>
@@ -719,6 +1059,12 @@ export default function Dashboard() {
                         </td>
                         <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
                           {renderStatusBadge(dualStatusDisplay.trackingStatus, 'tracking')}
+                        </td>
+                        <td className="hidden lg:table-cell px-2 sm:px-4 py-4">
+                          <div className="text-sm">
+                            <div className="font-medium text-gray-900">{currentLocation.user}</div>
+                            <div className="text-xs text-gray-500">({currentLocation.location})</div>
+                          </div>
                         </td>
                         <td className="hidden md:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{doc.type}</td>
                         <td className="hidden lg:table-cell px-2 sm:px-4 py-4 whitespace-nowrap">
@@ -912,6 +1258,17 @@ export default function Dashboard() {
                   <Filter className="h-4 w-4 mr-2" />
                   FILTER
                 </Button>
+                {user?.role === "admin" && selectedDocuments.length > 0 && (
+                  <Button 
+                    onClick={handleBulkDeliveryMethod}
+                    size="sm" 
+                    variant="default"
+                    className="w-fit"
+                  >
+                    <Truck className="h-4 w-4 mr-2" />
+                    Send Selected ({selectedDocuments.length})
+                  </Button>
+                )}
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-full sm:w-48">
                     <SelectValue placeholder="Filter by Status" />
@@ -945,6 +1302,60 @@ export default function Dashboard() {
             </TabsContent>
           </div>
         </Tabs>
+
+        {/* Delivery Method Selection Dialog */}
+        <Dialog open={showDeliveryDialog} onOpenChange={setShowDeliveryDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Truck className="h-5 w-5 text-blue-600" />
+                Select Delivery Method
+              </DialogTitle>
+              <DialogDescription>
+                Choose how you want to deliver {selectedDocuments.length} selected document{selectedDocuments.length > 1 ? 's' : ''}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid grid-cols-1 gap-4 py-4">
+              <Button
+                onClick={() => handleDeliveryMethodConfirm("mail_controller")}
+                className="h-auto p-4 flex flex-col items-center gap-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border-2 border-blue-200 hover:border-blue-300"
+                variant="outline"
+              >
+                <div className="flex items-center gap-2">
+                  <Truck className="h-6 w-6" />
+                  <span className="font-semibold">Mail Controller Pickup</span>
+                </div>
+                <span className="text-sm text-blue-600 text-center">
+                  Documents will be picked up by mail controller for delivery
+                </span>
+              </Button>
+
+              <Button
+                onClick={() => handleDeliveryMethodConfirm("hand_to_hand")}
+                className="h-auto p-4 flex flex-col items-center gap-2 bg-green-50 hover:bg-green-100 text-green-700 border-2 border-green-200 hover:border-green-300"
+                variant="outline"
+              >
+                <div className="flex items-center gap-2">
+                  <Users className="h-6 w-6" />
+                  <span className="font-semibold">Hand-to-Hand Delivery</span>
+                </div>
+                <span className="text-sm text-green-600 text-center">
+                  Documents will be delivered directly to first approver
+                </span>
+              </Button>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowDeliveryDialog(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </SidebarLayout>
   )
