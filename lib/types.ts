@@ -31,6 +31,7 @@ export type TrackingStatus =
   | "READY_FOR_NEXT_STEP" // Ready to move to next approval step
   | "HAND_TO_HAND_PENDING" // Hand-to-hand delivery pending confirmation
   | "FINAL_APPROVAL_PENDING" // Final approver hand-to-hand pending admin closure
+  | "REJECTED_RETURNED"   // Rejected document returned to originator
 
 // Legacy Document status types (for backward compatibility)
 export type DocumentStatus = 
@@ -50,6 +51,7 @@ export type DocumentStatus =
   | "REJECTED ROUTE"
   | "REJECTED - Ready for Pickup"
   | "REJECTED - Hand to Hand"
+  | "REJECTED - Returned to Originator"
   | "Closed"
 
 // Template field types
@@ -375,6 +377,10 @@ export const LEGACY_TO_DUAL_STATUS_MAP: Record<DocumentStatus, StatusMapping> = 
     documentStatus: "REJECTED",
     trackingStatus: "HAND_TO_HAND_PENDING"
   },
+  "REJECTED - Returned to Originator": {
+    documentStatus: "REJECTED",
+    trackingStatus: "REJECTED_RETURNED"
+  },
   "Closed": {
     documentStatus: "COMPLETED",
     trackingStatus: "RECEIVED"
@@ -417,7 +423,7 @@ export const TRACKING_STATUS_DISPLAY: Record<TrackingStatus, StatusDisplay> = {
     icon: "🚚"
   },
   "IN_TRANSIT_REJECTED": {
-    text: "Returning",
+    text: "Returning to Originator",
     color: "bg-red-500",
     icon: "↩️"
   },
@@ -450,6 +456,11 @@ export const TRACKING_STATUS_DISPLAY: Record<TrackingStatus, StatusDisplay> = {
     text: "Final Approval Pending",
     color: "bg-teal-500",
     icon: "🏆"
+  },
+  "REJECTED_RETURNED": {
+    text: "Rejected - Returned to Originator",
+    color: "bg-red-600",
+    icon: "🔙"
   }
 }
 

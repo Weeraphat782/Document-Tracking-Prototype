@@ -345,7 +345,7 @@ export class EnhancedDocumentService {
         case "deliver":
           // Check if this is a rejected document being delivered back to creator
           if (document.status === "In Transit - Rejected Document") {
-            newStatus = deliveryMethod === "hand_to_hand" ? "REJECTED - Hand to Hand" : "Delivered (Drop Off)"
+            newStatus = deliveryMethod === "hand_to_hand" ? "REJECTED - Hand to Hand" : "REJECTED - Returned to Originator"
           } else {
             newStatus = deliveryMethod === "hand_to_hand" ? "Delivered (Hand to Hand)" : "Delivered (Drop Off)"
           }
@@ -494,6 +494,7 @@ export class EnhancedDocumentService {
       "REJECTED ROUTE": { text: "REJECTED ROUTE", color: "bg-red-700 text-white font-bold", icon: "x-circle" },
       "REJECTED - Ready for Pickup": { text: "REJECTED - Ready for Pickup", color: "bg-red-700 text-white font-bold", icon: "x-circle" },
       "REJECTED - Hand to Hand": { text: "REJECTED - Hand to Hand - Awaiting Confirmation", color: "bg-red-600 text-white font-bold", icon: "x-hand" },
+      "REJECTED - Returned to Originator": { text: "REJECTED - Returned to Originator", color: "bg-red-700 text-white font-bold", icon: "return-rejected" },
       "Closed": { text: "Closed", color: "bg-gray-600 text-white font-semibold", icon: "archive" }
     }
     
