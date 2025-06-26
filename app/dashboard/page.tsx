@@ -135,7 +135,8 @@ export default function Dashboard() {
       "Approval Complete. Pending return to Originator",
       "REJECTED ROUTE",
       "REJECTED - Ready for Pickup",
-      "REJECTED - Hand to Hand"
+      "REJECTED - Hand to Hand",
+      "REJECTED - Returned to Originator"  // Admin can still revise this
     ]
 
     const active = docs.filter(doc => activeStatuses.includes(doc.status))
