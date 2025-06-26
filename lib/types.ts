@@ -12,7 +12,27 @@ export interface User {
 // Workflow types
 export type WorkflowType = "flow" | "drop"
 
-// Document status types
+// NEW: Dual Status System
+// Document Status - represents the approval/business state of the document
+export type DocumentStatusNew = 
+  | "ACTIVE"          // Document is in active workflow (includes draft, approved steps)
+  | "REJECTED"        // Document has been rejected
+  | "COMPLETED"       // Document workflow is complete
+  | "CANCELLED"       // Document has been cancelled
+
+// Tracking Status - represents the physical/logistical state
+export type TrackingStatus = 
+  | "PENDING_PICKUP"      // Waiting to be picked up
+  | "IN_TRANSIT"          // Being transported
+  | "IN_TRANSIT_REJECTED" // Being transported back (rejected)
+  | "DELIVERED"           // Has been delivered
+  | "RECEIVED"            // Has been received/confirmed
+  | "AWAITING_APPROVAL"   // Waiting for approval action
+  | "READY_FOR_NEXT_STEP" // Ready to move to next approval step
+  | "HAND_TO_HAND_PENDING" // Hand-to-hand delivery pending confirmation
+  | "FINAL_APPROVAL_PENDING" // Final approver hand-to-hand pending admin closure
+
+// Legacy Document status types (for backward compatibility)
 export type DocumentStatus = 
   | "NEW"
   | "Ready for Pick-up (Drop Off)"
@@ -94,7 +114,14 @@ export interface Document {
   type: string
   description?: string
   workflow: WorkflowType
+  
+  // NEW: Dual Status System
+  documentStatus?: DocumentStatusNew  // Business/approval status
+  trackingStatus?: TrackingStatus     // Physical/logistical status
+  
+  // Legacy status (for backward compatibility)
   status: DocumentStatus
+  
   createdAt: string
   createdBy: string
   createdByDropOffLocation?: string
@@ -175,8 +202,16 @@ export interface DocumentAction {
   location?: string
   comments?: string
   deliveryMethod?: "drop_off" | "hand_to_hand"
+  
+  // Legacy status tracking
   previousStatus?: DocumentStatus
   newStatus: DocumentStatus
+  
+  // NEW: Dual status tracking
+  previousDocumentStatus?: DocumentStatusNew
+  newDocumentStatus?: DocumentStatusNew
+  previousTrackingStatus?: TrackingStatus
+  newTrackingStatus?: TrackingStatus
 }
 
 export type ActionType = 
@@ -260,4 +295,181 @@ export interface ScanResult {
   nextStep?: string
   timestamp: string
   warnings?: string[]
+}
+
+// NEW: Dual Status System Utilities
+export interface StatusMapping {
+  documentStatus: DocumentStatusNew
+  trackingStatus: TrackingStatus
+}
+
+export interface StatusDisplay {
+  text: string
+  color: string
+  icon?: string
+}
+
+// Status mapping from legacy to new dual status system
+export const LEGACY_TO_DUAL_STATUS_MAP: Record<DocumentStatus, StatusMapping> = {
+  "NEW": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "PENDING_PICKUP"
+  },
+  "Ready for Pick-up (Drop Off)": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "PENDING_PICKUP"
+  },
+  "In Transit (Mail Controller)": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "IN_TRANSIT"
+  },
+  "In Transit - Rejected Document": {
+    documentStatus: "REJECTED",
+    trackingStatus: "IN_TRANSIT_REJECTED"
+  },
+  "Delivered (Drop Off)": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "DELIVERED"
+  },
+  "Delivered (User)": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "DELIVERED"
+  },
+  "Delivered (Hand to Hand)": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "HAND_TO_HAND_PENDING"
+  },
+  "Final Approval - Hand to Hand": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "FINAL_APPROVAL_PENDING"
+  },
+  "Received (User)": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "RECEIVED"
+  },
+  "Approved by Approver. Pending pickup for next step": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "PENDING_PICKUP"
+  },
+  "Approval Complete. Pending return to Originator": {
+    documentStatus: "ACTIVE",
+    trackingStatus: "PENDING_PICKUP"
+  },
+  "COMPLETED ROUTE": {
+    documentStatus: "COMPLETED",
+    trackingStatus: "RECEIVED"
+  },
+  "CANCELLED ROUTE": {
+    documentStatus: "CANCELLED",
+    trackingStatus: "RECEIVED"
+  },
+  "REJECTED ROUTE": {
+    documentStatus: "REJECTED",
+    trackingStatus: "RECEIVED"
+  },
+  "REJECTED - Ready for Pickup": {
+    documentStatus: "REJECTED",
+    trackingStatus: "PENDING_PICKUP"
+  },
+  "REJECTED - Hand to Hand": {
+    documentStatus: "REJECTED",
+    trackingStatus: "HAND_TO_HAND_PENDING"
+  },
+  "Closed": {
+    documentStatus: "COMPLETED",
+    trackingStatus: "RECEIVED"
+  }
+}
+
+// Display configurations for new status system
+export const DOCUMENT_STATUS_DISPLAY: Record<DocumentStatusNew, StatusDisplay> = {
+  "ACTIVE": {
+    text: "Active",
+    color: "bg-blue-500",
+    icon: "🔄"
+  },
+  "REJECTED": {
+    text: "Rejected",
+    color: "bg-red-500",
+    icon: "❌"
+  },
+  "COMPLETED": {
+    text: "Completed",
+    color: "bg-emerald-500",
+    icon: "🏁"
+  },
+  "CANCELLED": {
+    text: "Cancelled",
+    color: "bg-gray-600",
+    icon: "🚫"
+  }
+}
+
+export const TRACKING_STATUS_DISPLAY: Record<TrackingStatus, StatusDisplay> = {
+  "PENDING_PICKUP": {
+    text: "Pending Pickup",
+    color: "bg-yellow-500",
+    icon: "📦"
+  },
+  "IN_TRANSIT": {
+    text: "In Transit",
+    color: "bg-blue-500",
+    icon: "🚚"
+  },
+  "IN_TRANSIT_REJECTED": {
+    text: "Returning",
+    color: "bg-red-500",
+    icon: "↩️"
+  },
+  "DELIVERED": {
+    text: "Delivered",
+    color: "bg-green-500",
+    icon: "📍"
+  },
+  "RECEIVED": {
+    text: "Received",
+    color: "bg-emerald-500",
+    icon: "✅"
+  },
+  "AWAITING_APPROVAL": {
+    text: "Awaiting Approval",
+    color: "bg-orange-500",
+    icon: "⏳"
+  },
+  "READY_FOR_NEXT_STEP": {
+    text: "Ready for Next Step",
+    color: "bg-indigo-500",
+    icon: "➡️"
+  },
+  "HAND_TO_HAND_PENDING": {
+    text: "Hand-to-Hand Pending",
+    color: "bg-purple-500",
+    icon: "🤝"
+  },
+  "FINAL_APPROVAL_PENDING": {
+    text: "Final Approval Pending",
+    color: "bg-teal-500",
+    icon: "🏆"
+  }
+}
+
+// Utility functions for dual status system
+export const convertLegacyToDualStatus = (legacyStatus: DocumentStatus): StatusMapping => {
+  return LEGACY_TO_DUAL_STATUS_MAP[legacyStatus] || {
+    documentStatus: "ACTIVE",
+    trackingStatus: "PENDING_PICKUP"
+  }
+}
+
+export const getDualStatusFromDocument = (document: Document): StatusMapping => {
+  // If dual status is already set, use it
+  if (document.documentStatus && document.trackingStatus) {
+    return {
+      documentStatus: document.documentStatus,
+      trackingStatus: document.trackingStatus
+    }
+  }
+  
+  // Otherwise convert from legacy status
+  return convertLegacyToDualStatus(document.status)
 } 

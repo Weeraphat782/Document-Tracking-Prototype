@@ -14,7 +14,8 @@ import {
   CreateTemplateRequest,
   Notification,
   ApprovalMode,
-  DocumentRevision
+  DocumentRevision,
+  convertLegacyToDualStatus
 } from './types'
 import { supabase, SupabaseService } from './supabase'
 import { Database } from './database.types'
@@ -73,13 +74,18 @@ export class DatabaseService {
 
   // Convert database row to Document object
   private static mapRowToDocument(row: Database['public']['Tables']['documents']['Row']): Document {
+    const legacyStatus = row.status as DocumentStatus
+    const dualStatus = convertLegacyToDualStatus(legacyStatus)
+    
     return {
       id: row.id,
       title: row.title,
       type: row.type,
       description: row.description || undefined,
       workflow: row.workflow,
-      status: row.status as DocumentStatus,
+      status: legacyStatus,
+      documentStatus: (row as any).document_status || dualStatus.documentStatus,
+      trackingStatus: (row as any).tracking_status || dualStatus.trackingStatus,
       createdAt: row.created_at,
       updatedAt: row.updated_at || undefined,
       createdBy: row.created_by,
@@ -173,13 +179,19 @@ export class DatabaseService {
       comments: "Document workflow initiated"
     }
 
+    // Set initial dual status
+    const initialStatus: DocumentStatus = "Ready for Pick-up (Drop Off)"
+    const dualStatus = convertLegacyToDualStatus(initialStatus)
+
     const document: Document = {
       id: docId,
       title,
       type: template?.name || "Unknown",
       description,
       workflow,
-      status: "Ready for Pick-up (Drop Off)",
+      status: initialStatus,
+      documentStatus: dualStatus.documentStatus,
+      trackingStatus: dualStatus.trackingStatus,
       createdAt: now,
       createdBy,
       createdByDropOffLocation,
@@ -290,18 +302,28 @@ export class DatabaseService {
         if (user.role === "approver") {
           documents = documents.filter(doc => {
             if (doc.approvalSteps && doc.approvalSteps.length > 0) {
-              // Check if user is an approver in any pending step
-              const userSteps = doc.approvalSteps.filter(step => 
-                step.approverEmail === user.email && step.status === "pending"
-              )
+              // Find user's approval step
+              const userStep = doc.approvalSteps.find(step => step.approverEmail === user.email)
+              if (!userStep || userStep.status !== "pending") {
+                return false
+              }
               
-              // Also check if user is the recipient of a hand-to-hand delivery
+              // Check if user is the current step approver
+              const isCurrentStep = doc.approvalSteps[doc.currentStepIndex || 0]?.approverEmail === user.email
+              
+              // Show documents that are:
+              // 1. Pending for this approver
+              // 2. Hand-to-hand delivered to this approver
+              // 3. Already received by this approver (waiting for approval)
               const isHandToHandRecipient = (
                 (doc.status === "Delivered (Hand to Hand)" || doc.status === "REJECTED - Hand to Hand") &&
-                doc.approvalSteps.some(step => step.approverEmail === user.email)
+                isCurrentStep
               )
               
-              return userSteps.length > 0 || isHandToHandRecipient
+              const isReceivedByUser = doc.status === "Received (User)" && isCurrentStep
+              
+              return isCurrentStep && (userStep.status === "pending" && (isHandToHandRecipient || isReceivedByUser || 
+                !["Delivered (Hand to Hand)", "REJECTED - Hand to Hand", "Received (User)"].includes(doc.status)))
             }
             return false
           })
@@ -427,7 +449,23 @@ export class DatabaseService {
   private static getFromLocalStorage(): Document[] {
     try {
       const docs = localStorage.getItem("documents")
-      return docs ? JSON.parse(docs) : []
+      if (!docs) return []
+      
+      const parsed = JSON.parse(docs) as Document[]
+      if (!Array.isArray(parsed)) return []
+      
+      // Ensure all documents have dual status
+      return parsed.map(doc => {
+        if (!doc.documentStatus || !doc.trackingStatus) {
+          const dualStatus = convertLegacyToDualStatus(doc.status)
+          return {
+            ...doc,
+            documentStatus: dualStatus.documentStatus,
+            trackingStatus: dualStatus.trackingStatus
+          }
+        }
+        return doc
+      })
     } catch (error) {
       console.error("Error retrieving from localStorage:", error)
       return []
@@ -480,8 +518,28 @@ export class DatabaseService {
       case "approver":
         return documents.filter(doc => {
           if (doc.workflow === "flow" && doc.approvalSteps) {
-            const currentStep = doc.approvalSteps[doc.currentStepIndex || 0]
-            return currentStep?.approverEmail === user.email && currentStep.status === "pending"
+            // Find user's approval step
+            const userStep = doc.approvalSteps.find(step => step.approverEmail === user.email)
+            if (!userStep || userStep.status !== "pending") {
+              return false
+            }
+            
+            // Check if user is the current step approver
+            const isCurrentStep = doc.approvalSteps[doc.currentStepIndex || 0]?.approverEmail === user.email
+            
+            // Show documents that are:
+            // 1. Pending for this approver
+            // 2. Hand-to-hand delivered to this approver
+            // 3. Already received by this approver (waiting for approval)
+            const isHandToHandRecipient = (
+              (doc.status === "Delivered (Hand to Hand)" || doc.status === "REJECTED - Hand to Hand") &&
+              isCurrentStep
+            )
+            
+            const isReceivedByUser = doc.status === "Received (User)" && isCurrentStep
+            
+            return isCurrentStep && (userStep.status === "pending" && (isHandToHandRecipient || isReceivedByUser || 
+              !["Delivered (Hand to Hand)", "REJECTED - Hand to Hand", "Received (User)"].includes(doc.status)))
           }
           return false
         })

@@ -12,7 +12,7 @@ import { FileText, Plus, QrCode, Clock, CheckCircle, XCircle, Truck, Package, Us
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
-import { Document, User as UserType } from "@/lib/types"
+import { Document, User as UserType, getDualStatusFromDocument, DOCUMENT_STATUS_DISPLAY, TRACKING_STATUS_DISPLAY } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 import SidebarLayout from "@/components/sidebar-layout"
 
@@ -162,6 +162,24 @@ export default function Dashboard() {
 
   const getStatusDisplay = (status: string) => {
     return EnhancedDocumentService.getStatusDisplay(status as any)
+  }
+
+  // NEW: Functions for dual status display
+  const getDualStatusDisplay = (document: Document) => {
+    const dualStatus = getDualStatusFromDocument(document)
+    return {
+      documentStatus: DOCUMENT_STATUS_DISPLAY[dualStatus.documentStatus],
+      trackingStatus: TRACKING_STATUS_DISPLAY[dualStatus.trackingStatus]
+    }
+  }
+
+  const renderStatusBadge = (display: any, type: 'document' | 'tracking') => {
+    return (
+      <Badge className={`${display.color} text-xs text-white`}>
+        <span className="mr-1">{display.icon}</span>
+        <span className="hidden sm:inline">{display.text}</span>
+      </Badge>
+    )
   }
 
   const handleDebugLocalStorage = async () => {
@@ -670,7 +688,8 @@ export default function Dashboard() {
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sr.</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document ID</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
-                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document Status</th>
+                    <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracking Status</th>
                     <th className="hidden md:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                     <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workflow</th>
                     <th className="hidden sm:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
@@ -680,6 +699,7 @@ export default function Dashboard() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {currentDocuments.map((doc, index) => {
                     const workflowInfo = getWorkflowInfo(doc)
+                    const dualStatusDisplay = getDualStatusDisplay(doc)
                     const srNo = startIndex + index + 1
                     return (
                       <tr key={doc.id} className="hover:bg-gray-50">
@@ -694,10 +714,10 @@ export default function Dashboard() {
                           </div>
                         </td>
                         <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
-                          <Badge className={`${getStatusDisplay(doc.status).color} text-xs`}>
-                            {getStatusIcon(doc.status)}
-                            <span className="ml-1 hidden sm:inline">{getStatusDisplay(doc.status).text}</span>
-                          </Badge>
+                          {renderStatusBadge(dualStatusDisplay.documentStatus, 'document')}
+                        </td>
+                        <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
+                          {renderStatusBadge(dualStatusDisplay.trackingStatus, 'tracking')}
                         </td>
                         <td className="hidden md:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{doc.type}</td>
                         <td className="hidden lg:table-cell px-2 sm:px-4 py-4 whitespace-nowrap">

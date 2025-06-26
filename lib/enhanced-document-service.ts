@@ -14,7 +14,8 @@ import {
   Notification,
   ApprovalMode,
   DocumentRevision,
-  PreservedApproval
+  PreservedApproval,
+  convertLegacyToDualStatus
 } from './types'
 import { DatabaseService } from './database-service'
 
@@ -426,6 +427,11 @@ export class EnhancedDocumentService {
       document.status = newStatus
       document.updatedAt = timestamp
 
+      // Update dual status based on new legacy status
+      const dualStatus = convertLegacyToDualStatus(newStatus)
+      document.documentStatus = dualStatus.documentStatus
+      document.trackingStatus = dualStatus.trackingStatus
+
       // Add action to history
       const actionRecord: DocumentAction = {
         id: this.generateActionId(),
@@ -436,7 +442,12 @@ export class EnhancedDocumentService {
         previousStatus,
         newStatus,
         comments,
-        deliveryMethod
+        deliveryMethod,
+        // Add dual status tracking
+        previousDocumentStatus: document.documentStatus,
+        newDocumentStatus: dualStatus.documentStatus,
+        previousTrackingStatus: document.trackingStatus,
+        newTrackingStatus: dualStatus.trackingStatus
       }
       document.actionHistory.push(actionRecord)
 
