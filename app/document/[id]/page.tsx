@@ -155,7 +155,11 @@ export default function DocumentDetailPage() {
     return <FileText className="h-4 w-4" />
   }
 
-  const getStatusColor = (status: string) => {
+  const getStatusDisplay = (status: string) => {
+    return EnhancedDocumentService.getStatusDisplay(status as any)
+  }
+
+  const getStatusColorOld = (status: string) => {
     if (status.includes("Transit")) return "bg-blue-100 text-blue-800"
     if (status.includes("Review")) return "bg-yellow-100 text-yellow-800"
     if (status.includes("Approved")) return "bg-green-100 text-green-800"
@@ -221,7 +225,7 @@ export default function DocumentDetailPage() {
           // Delivering to an approver for review
           // Find which approver based on the workflow step at that time
           const deliveryActions = document.actionHistory
-            .filter(a => a.action === "deliver" && a.newStatus === "With Approver for Review")
+            .filter(a => a.action === "deliver" && a.newStatus === "Received (User)")
           const deliveryIndex = deliveryActions.findIndex(a => a.id === action.id)
           
           if (deliveryIndex >= 0 && deliveryIndex < document.approvalSteps.length) {
@@ -321,7 +325,7 @@ export default function DocumentDetailPage() {
                     </CardDescription>
                   </div>
                   <div className="flex-shrink-0">
-                    <Badge className={`${getStatusColor(document.status)} text-xs sm:text-sm px-2 sm:px-3 py-1`}>
+                    <Badge className={`${getStatusDisplay(document.status).color} text-xs sm:text-sm px-2 sm:px-3 py-1`}>
                       <span className="flex items-center">
                         {getStatusIcon(document.status)}
                         <span className="ml-1 truncate max-w-[120px] sm:max-w-none">{document.status}</span>

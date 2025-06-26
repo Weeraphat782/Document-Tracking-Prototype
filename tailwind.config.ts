@@ -8,6 +8,27 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "*.{js,ts,jsx,tsx,mdx}"
   ],
+  safelist: [
+    // Status colors
+    'bg-blue-600',
+    'bg-cyan-600', 
+    'bg-yellow-600',
+    'bg-purple-600',
+    'bg-indigo-600',
+    'bg-indigo-500',
+    'bg-orange-600',
+    'bg-green-600',
+    'bg-green-500',
+    'bg-emerald-600',
+    'bg-green-700',
+    'bg-red-600',
+    'bg-red-500',
+    'bg-red-700',
+    'bg-gray-600',
+    'text-white',
+    'font-semibold',
+    'font-bold'
+  ],
   theme: {
   	extend: {
   		colors: {

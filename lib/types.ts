@@ -14,15 +14,23 @@ export type WorkflowType = "flow" | "drop"
 
 // Document status types
 export type DocumentStatus = 
-  | "Ready for Pickup"
-  | "In Transit"
-  | "With Approver for Review"
+  | "NEW"
+  | "Ready for Pick-up (Drop Off)"
+  | "In Transit (Mail Controller)"
+  | "In Transit - Rejected Document"
+  | "Delivered (Drop Off)"
+  | "Delivered (User)"
+  | "Delivered (Hand to Hand)"
+  | "Final Approval - Hand to Hand"
+  | "Received (User)"
   | "Approved by Approver. Pending pickup for next step"
   | "Approval Complete. Pending return to Originator"
-  | "Rejected. Awaiting Revision"
-  | "Delivered"
-  | "Completed and Archived"
-  | "Cancelled"
+  | "COMPLETED ROUTE"
+  | "CANCELLED ROUTE"
+  | "REJECTED ROUTE"
+  | "REJECTED - Ready for Pickup"
+  | "REJECTED - Hand to Hand"
+  | "Closed"
 
 // Template field types
 export interface TemplateField {

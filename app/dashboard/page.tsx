@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { FileText, Plus, QrCode, Clock, CheckCircle, XCircle, Truck, Package, Users, User, AlertCircle, History, Trash2, Filter, Search, Activity, Archive } from "lucide-react"
+import { FileText, Plus, QrCode, Clock, CheckCircle, XCircle, Truck, Package, Users, User, AlertCircle, History, Trash2, Filter, Search, Activity, Archive, Download, Eye, FileImage, Edit, X, RotateCcw, CheckSquare } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
@@ -92,8 +92,8 @@ export default function Dashboard() {
         console.log("Documents for mail controller:", userDocs)
         allDocs.forEach(doc => {
           console.log(`Document ${doc.id}: Status="${doc.status}", Should show: ${
-            doc.status === "Ready for Pickup" ||
-            doc.status === "In Transit" ||
+            doc.status === "Ready for Pick-up (Drop Off)" ||
+            doc.status === "In Transit (Mail Controller)" ||
             doc.status === "Approved by Approver. Pending pickup for next step" ||
             doc.status === "Approval Complete. Pending return to Originator"
           }`)
@@ -122,13 +122,20 @@ export default function Dashboard() {
   // Separate documents into active and history based on status
   const separateDocuments = (docs: Document[]) => {
     const activeStatuses = [
-      "Ready for Pickup",
-      "In Transit", 
-      "With Approver for Review",
+      "NEW",
+      "Ready for Pick-up (Drop Off)",
+      "In Transit (Mail Controller)", 
+      "In Transit - Rejected Document",
+      "Delivered (Drop Off)",
+      "Delivered (User)",
+      "Delivered (Hand to Hand)",
+      "Final Approval - Hand to Hand",
+      "Received (User)",
       "Approved by Approver. Pending pickup for next step",
       "Approval Complete. Pending return to Originator",
-      "Rejected. Awaiting Revision",
-      "Delivered"
+      "REJECTED ROUTE",
+      "REJECTED - Ready for Pickup",
+      "REJECTED - Hand to Hand"
     ]
 
     const active = docs.filter(doc => activeStatuses.includes(doc.status))
@@ -153,16 +160,8 @@ export default function Dashboard() {
     return <FileText className="h-4 w-4" />
   }
 
-  const getStatusColor = (status: string) => {
-    if (status.includes("Transit")) return "bg-blue-100 text-blue-800"
-    if (status.includes("Review")) return "bg-yellow-100 text-yellow-800"
-    if (status.includes("Approved")) return "bg-green-100 text-green-800"
-    if (status.includes("Rejected")) return "bg-red-100 text-red-800"
-    if (status.includes("Pickup")) return "bg-purple-100 text-purple-800"
-    if (status.includes("Delivered")) return "bg-green-100 text-green-800"
-    if (status.includes("Completed")) return "bg-gray-100 text-gray-800"
-    if (status.includes("Cancelled")) return "bg-red-100 text-red-800"
-    return "bg-gray-100 text-gray-800"
+  const getStatusDisplay = (status: string) => {
+    return EnhancedDocumentService.getStatusDisplay(status as any)
   }
 
   const handleDebugLocalStorage = async () => {
@@ -259,20 +258,9 @@ export default function Dashboard() {
 
   const getRoleActions = () => {
     switch (user?.role) {
-              case "admin":
-          return (
-            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-              <h3 className="text-lg font-semibold mb-4">Admin Actions</h3>
-              <div className="flex flex-wrap gap-2">
-                <Link href="/create-document">
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Document
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          )
+      case "admin":
+        // Admin actions moved to page title section
+        return null
       case "mail":
         return (
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
@@ -326,8 +314,8 @@ export default function Dashboard() {
     // Show document details
     actions.push(
       <Link key="view" href={`/document/${document.id}`}>
-        <Button variant="outline" size="sm">
-          View Details
+        <Button variant="outline" size="sm" title="View Details">
+          <Eye className="h-4 w-4" />
         </Button>
       </Link>
     )
@@ -337,115 +325,114 @@ export default function Dashboard() {
       // Admin can see cover sheet and close completed documents
       actions.push(
         <Link key="cover" href={`/cover-sheet/${document.id}`}>
-          <Button variant="outline" size="sm">
-            Cover Sheet
+          <Button variant="outline" size="sm" title="Cover Sheet">
+            <FileImage className="h-4 w-4" />
           </Button>
         </Link>
       )
 
-             if (document.status === "Delivered" || 
-           document.status === "Completed and Archived") {
+      if (document.status === "Delivered (User)" || 
+          document.status === "COMPLETED ROUTE") {
         actions.push(
           <Button
             key="close"
             variant="outline"
             size="sm"
             onClick={() => handleCloseDocument(document.id)}
+            title="Close Workflow"
           >
-            Close Workflow
+            <CheckSquare className="h-4 w-4" />
           </Button>
         )
       }
 
-             // Admin can edit documents
-       actions.push(
-         <Link key="edit" href={`/document/${document.id}`}>
-           <Button
-             variant="outline"
-             size="sm"
-             className="text-blue-600 hover:text-blue-700"
-           >
-             Edit
-           </Button>
-         </Link>
-       )
+      // Admin can edit documents
+      actions.push(
+        <Link key="edit" href={`/document/${document.id}`}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-blue-600 hover:text-blue-700"
+            title="Edit"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        </Link>
+      )
 
-       // Admin can cancel documents
-       actions.push(
-         <Button
-           key="cancel"
-           variant="outline"
-           size="sm"
-           onClick={() => handleCancelDocument(document.id)}
-           className="text-red-600 hover:text-red-700"
-         >
-           Cancel Document
-         </Button>
-       )
+      // Admin can cancel documents
+      actions.push(
+        <Button
+          key="cancel"
+          variant="outline"
+          size="sm"
+          onClick={() => handleCancelDocument(document.id)}
+          className="text-red-600 hover:text-red-700"
+          title="Cancel Document"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )
 
-       // Admin can create revision for rejected documents
-       if (EnhancedDocumentService.canCreateRevision(document)) {
-         actions.push(
-           <Button
-             key="revise"
-             variant="outline"
-             size="sm"
-             onClick={() => handleCreateRevision(document.id)}
-             className="text-orange-600 hover:text-orange-700"
-           >
-             Create Revision
-           </Button>
-         )
-       }
+      // Admin can create revision for rejected documents
+      if (EnhancedDocumentService.canCreateRevision(document)) {
+        actions.push(
+          <Button
+            key="revise"
+            variant="outline"
+            size="sm"
+            onClick={() => handleCreateRevision(document.id)}
+            className="text-orange-600 hover:text-orange-700"
+            title="Create Revision"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        )
+      }
     }
 
-         if (user?.role === "mail") {
-       // Mail controller actions based on document status
-       if (document.status === "Ready for Pickup" || 
-           document.status === "Approved by Approver. Pending pickup for next step" ||
-           document.status === "Approval Complete. Pending return to Originator") {
-         actions.push(
-           <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
-             <Button size="sm">
-               <QrCode className="h-4 w-4 mr-2" />
-               Scan QR
-             </Button>
-           </Link>
-         )
-         
+    if (user?.role === "mail") {
+      // Mail controller actions based on document status
+      if (document.status === "Ready for Pick-up (Drop Off)" || 
+          document.status === "Approved by Approver. Pending pickup for next step" ||
+          document.status === "Approval Complete. Pending return to Originator") {
+        actions.push(
+          <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
+            <Button size="sm" title="Scan QR">
+              <QrCode className="h-4 w-4" />
+            </Button>
+          </Link>
+        )
+      }
+    }
 
-       }
-     }
+    if (user?.role === "approver") {
+      // Approver actions
+      if (document.status === "Received (User)" || 
+          document.status === "In Transit (Mail Controller)") {
+        actions.push(
+          <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
+            <Button size="sm" title="Scan QR">
+              <QrCode className="h-4 w-4" />
+            </Button>
+          </Link>
+        )
+      }
+    }
 
-     if (user?.role === "approver") {
-       // Approver actions
-       if (document.status === "With Approver for Review" || 
-           document.status === "In Transit") {
-         actions.push(
-           <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
-             <Button size="sm">
-               <QrCode className="h-4 w-4 mr-2" />
-               Scan QR
-             </Button>
-           </Link>
-         )
-       }
-     }
-
-     if (user?.role === "recipient") {
-       // Recipient actions  
-       if (document.status === "In Transit" || 
-           document.status === "Delivered") {
-         actions.push(
-           <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
-             <Button size="sm">
-               <QrCode className="h-4 w-4 mr-2" />
-               Scan QR
-             </Button>
-           </Link>
-         )
-       }
-     }
+    if (user?.role === "recipient") {
+      // Recipient actions  
+      if (document.status === "In Transit (Mail Controller)" || 
+          document.status === "Delivered (User)") {
+        actions.push(
+          <Link key="scan" href={`/scan-qr?expected=${document.id}`}>
+            <Button size="sm" title="Scan QR">
+              <QrCode className="h-4 w-4" />
+            </Button>
+          </Link>
+        )
+      }
+    }
 
     return (
       <div className="flex flex-wrap gap-2">
@@ -539,10 +526,6 @@ export default function Dashboard() {
     // Redirect to create-document page for editing the revision
     router.push(`/create-document?revisionOf=${documentId}`)
   }
-
-
-
-
 
   const getWorkflowInfo = (document: Document) => {
     if (document.workflow === "flow" && document.approvalSteps) {
@@ -711,9 +694,9 @@ export default function Dashboard() {
                           </div>
                         </td>
                         <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
-                          <Badge className={`${getStatusColor(doc.status)} text-xs`}>
+                          <Badge className={`${getStatusDisplay(doc.status).color} text-xs`}>
                             {getStatusIcon(doc.status)}
-                            <span className="ml-1 hidden sm:inline">{doc.status}</span>
+                            <span className="ml-1 hidden sm:inline">{getStatusDisplay(doc.status).text}</span>
                           </Badge>
                         </td>
                         <td className="hidden md:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{doc.type}</td>
@@ -811,8 +794,16 @@ export default function Dashboard() {
         </div>
 
         {/* Page Title */}
-        <div className="mb-6">
+        <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">Document Distribution System</h1>
+          {user.role === "admin" && (
+            <Link href="/create-document">
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add new Document
+              </Button>
+            </Link>
+          )}
         </div>
 
         {/* Role-specific Actions */}
@@ -876,48 +867,50 @@ export default function Dashboard() {
 
         {/* Document Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+          {/* Tabs Navigation - Full Width */}
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="active" className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Active Route ({activeDocuments.length})
+            </TabsTrigger>
+            <TabsTrigger value="history" className="flex items-center gap-2">
+              <Archive className="h-4 w-4" />
+              Route History ({historyDocuments.length})
+            </TabsTrigger>
+          </TabsList>
+
           <div className="bg-white rounded-lg border border-gray-200">
-            {/* Tabs Header */}
-            <div className="flex flex-col space-y-4 p-4 border-b border-gray-200">
-              <TabsList className="grid w-full grid-cols-2 max-w-md">
-                <TabsTrigger value="active" className="flex items-center gap-2">
-                  <Activity className="h-4 w-4" />
-                  Active Route ({activeDocuments.length})
-                </TabsTrigger>
-                <TabsTrigger value="history" className="flex items-center gap-2">
-                  <Archive className="h-4 w-4" />
-                  Route History ({historyDocuments.length})
-                </TabsTrigger>
-              </TabsList>
-              
-              {/* Filters */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border-b border-gray-200">
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Button variant="outline" size="sm" className="w-fit">
+                  <Download className="h-4 w-4 mr-2" />
+                  DEFAULT
+                </Button>
                 <Button variant="outline" size="sm" className="w-fit">
                   <Filter className="h-4 w-4 mr-2" />
                   FILTER
                 </Button>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div className="relative">
-                    <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <Input
-                      placeholder="Search by Document ID or Title"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 w-full sm:w-64"
-                    />
-                  </div>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="w-full sm:w-48">
-                      <SelectValue placeholder="Filter by Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      {getUniqueStatuses().map(status => (
-                        <SelectItem key={status} value={status}>{status}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-full sm:w-48">
+                    <SelectValue placeholder="Filter by Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    {getUniqueStatuses().map(status => (
+                      <SelectItem key={status} value={status}>{status}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="relative">
+                <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="Search by Document ID or Title"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 w-full sm:w-64"
+                />
               </div>
             </div>
 

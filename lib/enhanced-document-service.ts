@@ -276,6 +276,20 @@ export class EnhancedDocumentService {
         }
       }
 
+      // For approvers, also allow receiving hand-to-hand delivered documents
+      if (action === "receive") {
+        // Check if this is a hand-to-hand delivery waiting for confirmation
+        if (document.status === "Delivered (Hand to Hand)" || document.status === "REJECTED - Hand to Hand") {
+          // Check if this approver is the intended recipient
+          if (document.workflow === "flow" && document.approvalSteps) {
+            const approverStep = document.approvalSteps.find(step => step.approverEmail === user.email)
+            if (approverStep) {
+              return { allowed: true, warnings: ["Confirming hand-to-hand delivery receipt"] }
+            }
+          }
+        }
+      }
+
       return { allowed: true, warnings }
     }
 
@@ -320,13 +334,23 @@ export class EnhancedDocumentService {
     try {
       switch (action) {
         case "pickup":
-          newStatus = "In Transit"
+          // Check if this is a rejected document being picked up
+          if (document.status === "REJECTED - Ready for Pickup") {
+            newStatus = "In Transit - Rejected Document"
+          } else {
+            newStatus = "In Transit (Mail Controller)"
+          }
           break
         case "deliver":
-          newStatus = "With Approver for Review"
+          // Check if this is a rejected document being delivered back to creator
+          if (document.status === "In Transit - Rejected Document") {
+            newStatus = deliveryMethod === "hand_to_hand" ? "REJECTED - Hand to Hand" : "Delivered (Drop Off)"
+          } else {
+            newStatus = deliveryMethod === "hand_to_hand" ? "Delivered (Hand to Hand)" : "Delivered (Drop Off)"
+          }
           break
         case "receive":
-          newStatus = document.workflow === "flow" ? "With Approver for Review" : "Delivered"
+          newStatus = "Received (User)"
           break
         case "approve":
           if (document.workflow === "flow" && document.approvalSteps) {
@@ -345,11 +369,7 @@ export class EnhancedDocumentService {
               
               if (allApproved) {
                 // All approvers have approved
-                if (deliveryMethod === "hand_to_hand") {
-                  newStatus = "Delivered"
-                } else {
-                  newStatus = "Approval Complete. Pending return to Originator"
-                }
+                newStatus = deliveryMethod === "hand_to_hand" ? "Final Approval - Hand to Hand" : "Approval Complete. Pending return to Originator"
               } else if (document.approvalMode === "sequential") {
                 // Sequential mode: move to next pending step
                 const nextPendingIndex = document.approvalSteps.findIndex(step => step.status === "pending")
@@ -357,14 +377,14 @@ export class EnhancedDocumentService {
                   document.currentStepIndex = nextPendingIndex
                 }
                 if (deliveryMethod === "hand_to_hand") {
-                  newStatus = "With Approver for Review"
+                  newStatus = "Delivered (Hand to Hand)"
                 } else {
                   newStatus = "Approved by Approver. Pending pickup for next step"
                 }
               } else {
                 // Flexible mode: document can continue to any remaining approver
                 if (deliveryMethod === "hand_to_hand") {
-                  newStatus = pendingSteps.length > 0 ? "With Approver for Review" : "Delivered"
+                  newStatus = pendingSteps.length > 0 ? "Delivered (Hand to Hand)" : "Final Approval - Hand to Hand"
                 } else {
                   newStatus = pendingSteps.length > 0 
                     ? "Approved by Approver. Pending pickup for next step"
@@ -386,17 +406,13 @@ export class EnhancedDocumentService {
               document.rejectionReason = comments
             }
           }
-          if (deliveryMethod === "hand_to_hand") {
-            newStatus = "Delivered" // Document goes directly back to originator
-          } else {
-            newStatus = "Rejected. Awaiting Revision"
-          }
+          newStatus = deliveryMethod === "hand_to_hand" ? "REJECTED - Hand to Hand" : "REJECTED - Ready for Pickup"
           break
         case "close":
-          newStatus = "Completed and Archived"
+          newStatus = "COMPLETED ROUTE"
           break
         case "cancel":
-          newStatus = "Cancelled"
+          newStatus = "CANCELLED ROUTE"
           break
         default:
           return {
@@ -451,18 +467,26 @@ export class EnhancedDocumentService {
   // Get workflow status display
   static getStatusDisplay(status: DocumentStatus): { text: string, color: string, icon: string } {
     const statusMap: Record<DocumentStatus, { text: string, color: string, icon: string }> = {
-      "Ready for Pickup": { text: "Ready for Pickup", color: "bg-blue-100 text-blue-800", icon: "package" },
-      "In Transit": { text: "In Transit", color: "bg-yellow-100 text-yellow-800", icon: "truck" },
-      "With Approver for Review": { text: "Under Review", color: "bg-orange-100 text-orange-800", icon: "clock" },
-      "Approved by Approver. Pending pickup for next step": { text: "Approved - Next Step", color: "bg-green-100 text-green-800", icon: "check" },
-      "Approval Complete. Pending return to Originator": { text: "Approved - Returning", color: "bg-green-100 text-green-800", icon: "check-double" },
-      "Rejected. Awaiting Revision": { text: "Rejected", color: "bg-red-100 text-red-800", icon: "x" },
-      "Delivered": { text: "Delivered", color: "bg-purple-100 text-purple-800", icon: "check-circle" },
-      "Completed and Archived": { text: "Completed", color: "bg-gray-100 text-gray-800", icon: "archive" },
-      "Cancelled": { text: "Cancelled", color: "bg-red-100 text-red-800", icon: "ban" }
+      "NEW": { text: "NEW", color: "bg-blue-600 text-white font-semibold", icon: "file-plus" },
+      "Ready for Pick-up (Drop Off)": { text: "Ready for Pick-up (Drop Off)", color: "bg-cyan-600 text-white font-semibold", icon: "package" },
+      "In Transit (Mail Controller)": { text: "In Transit (Mail Controller)", color: "bg-yellow-600 text-white font-semibold", icon: "truck" },
+      "In Transit - Rejected Document": { text: "In Transit - Rejected Document", color: "bg-red-500 text-white font-semibold", icon: "truck-x" },
+      "Delivered (Drop Off)": { text: "Delivered (Drop Off)", color: "bg-purple-600 text-white font-semibold", icon: "building" },
+      "Delivered (User)": { text: "Delivered (User)", color: "bg-indigo-600 text-white font-semibold", icon: "user-check" },
+      "Delivered (Hand to Hand)": { text: "Delivered (Hand to Hand) - Awaiting Confirmation", color: "bg-indigo-500 text-white font-semibold", icon: "hand" },
+      "Final Approval - Hand to Hand": { text: "Final Approval - Ready to Close", color: "bg-green-500 text-white font-semibold", icon: "check-hand" },
+      "Received (User)": { text: "Received (User)", color: "bg-orange-600 text-white font-semibold", icon: "clock" },
+      "Approved by Approver. Pending pickup for next step": { text: "Approved - Ready for Drop-off", color: "bg-green-600 text-white font-semibold", icon: "check" },
+      "Approval Complete. Pending return to Originator": { text: "Approved - Returning", color: "bg-emerald-600 text-white font-semibold", icon: "check-double" },
+      "COMPLETED ROUTE": { text: "COMPLETED ROUTE", color: "bg-green-700 text-white font-bold", icon: "check-circle" },
+      "CANCELLED ROUTE": { text: "CANCELLED ROUTE", color: "bg-red-600 text-white font-bold", icon: "ban" },
+      "REJECTED ROUTE": { text: "REJECTED ROUTE", color: "bg-red-700 text-white font-bold", icon: "x-circle" },
+      "REJECTED - Ready for Pickup": { text: "REJECTED - Ready for Pickup", color: "bg-red-700 text-white font-bold", icon: "x-circle" },
+      "REJECTED - Hand to Hand": { text: "REJECTED - Hand to Hand - Awaiting Confirmation", color: "bg-red-600 text-white font-bold", icon: "x-hand" },
+      "Closed": { text: "Closed", color: "bg-gray-600 text-white font-semibold", icon: "archive" }
     }
     
-    return statusMap[status] || { text: status, color: "bg-gray-100 text-gray-800", icon: "file" }
+    return statusMap[status] || { text: status, color: "bg-gray-600 text-white font-semibold", icon: "file" }
   }
 
   // Debug and utility functions
@@ -607,13 +631,13 @@ export class EnhancedDocumentService {
             qrCurrentStep = "Approved - Ready for Pickup to Next Step"
           } else {
             // No approvals yet, ready for initial pickup
-            documentStatus = "Ready for Pickup"
+            documentStatus = "Ready for Pick-up (Drop Off)"
             currentStepIndex = 0
             qrCurrentStep = "Ready for Pickup"
           }
         } else {
           // Flexible mode - ready for pickup to any pending approver
-          documentStatus = "Ready for Pickup"
+          documentStatus = "Ready for Pick-up (Drop Off)"
           currentStepIndex = firstPendingIndex
           qrCurrentStep = "Ready for Pickup"
         }
@@ -682,13 +706,13 @@ export class EnhancedDocumentService {
         performedBy: revisedBy,
         performedAt: new Date().toISOString(),
         previousStatus: originalDocument.status,
-        newStatus: "Cancelled",
+        newStatus: "CANCELLED ROUTE",
         comments: `Document revised as ${newDocumentId}`
       }
 
       const updatedOriginal: Document = {
         ...originalDocument,
-        status: "Cancelled",
+        status: "CANCELLED ROUTE",
         updatedAt: new Date().toISOString(),
         actionHistory: [...originalDocument.actionHistory, originalUpdateAction]
       }
@@ -814,13 +838,13 @@ export class EnhancedDocumentService {
             qrCurrentStep = "Approved - Ready for Pickup to Next Step"
           } else {
             // No approvals yet, ready for initial pickup
-            documentStatus = "Ready for Pickup"
+            documentStatus = "Ready for Pick-up (Drop Off)"
             currentStepIndex = 0
             qrCurrentStep = "Ready for Pickup"
           }
         } else {
           // Flexible mode - ready for pickup to any pending approver
-          documentStatus = "Ready for Pickup"
+          documentStatus = "Ready for Pick-up (Drop Off)"
           currentStepIndex = firstPendingIndex
           qrCurrentStep = "Ready for Pickup"
         }
@@ -892,13 +916,13 @@ export class EnhancedDocumentService {
         performedBy: revisedBy,
         performedAt: new Date().toISOString(),
         previousStatus: originalDocument.status,
-        newStatus: "Cancelled",
+        newStatus: "CANCELLED ROUTE",
         comments: `Document revised with edits as ${newDocumentId}`
       }
 
       const updatedOriginal: Document = {
         ...originalDocument,
-        status: "Cancelled",
+        status: "CANCELLED ROUTE",
         updatedAt: new Date().toISOString(),
         actionHistory: [...originalDocument.actionHistory, originalUpdateAction]
       }
@@ -964,7 +988,7 @@ export class EnhancedDocumentService {
     // 3. Document has approval steps, AND
     // 4. Some approvers have already approved (so we can preserve approvals), AND
     // 5. Document is not completed/cancelled/archived
-    const notFinalStatus = !["Completed and Archived", "Cancelled", "Closed"].includes(document.status)
+    const notFinalStatus = !["COMPLETED ROUTE", "CANCELLED ROUTE", "Closed"].includes(document.status)
     
     return hasBeenRejected && 
            document.workflow === "flow" &&
@@ -982,6 +1006,18 @@ export class EnhancedDocumentService {
   // Check if mail controller should be forced to pickup
   static shouldForcePickup(document: Document, user: User): boolean {
     if (user.role !== "mail") return false
+    
+    // Force pickup for specific statuses
+    const forcePickupStatuses = [
+      "Ready for Pick-up (Drop Off)",
+      "Approved by Approver. Pending pickup for next step", 
+      "Approval Complete. Pending return to Originator",
+      "REJECTED - Ready for Pickup"
+    ]
+    
+    if (forcePickupStatuses.includes(document.status)) {
+      return true
+    }
     
     // Get mail controller's action history for this document
     const mailActions = document.actionHistory.filter(a => 

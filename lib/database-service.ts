@@ -169,7 +169,7 @@ export class DatabaseService {
       action: "created",
       performedBy: createdBy,
       performedAt: now,
-      newStatus: "Ready for Pickup",
+              newStatus: "Ready for Pick-up (Drop Off)",
       comments: "Document workflow initiated"
     }
 
@@ -179,7 +179,7 @@ export class DatabaseService {
       type: template?.name || "Unknown",
       description,
       workflow,
-      status: "Ready for Pickup",
+      status: "Ready for Pick-up (Drop Off)",
       createdAt: now,
       createdBy,
       createdByDropOffLocation,
@@ -294,7 +294,14 @@ export class DatabaseService {
               const userSteps = doc.approvalSteps.filter(step => 
                 step.approverEmail === user.email && step.status === "pending"
               )
-              return userSteps.length > 0
+              
+              // Also check if user is the recipient of a hand-to-hand delivery
+              const isHandToHandRecipient = (
+                (doc.status === "Delivered (Hand to Hand)" || doc.status === "REJECTED - Hand to Hand") &&
+                doc.approvalSteps.some(step => step.approverEmail === user.email)
+              )
+              
+              return userSteps.length > 0 || isHandToHandRecipient
             }
             return false
           })
@@ -454,10 +461,12 @@ export class DatabaseService {
         return documents.filter(doc => {
           // Documents that need mail controller actions (active)
           const needsMailAction = 
-            doc.status === "Ready for Pickup" ||
-            doc.status === "In Transit" ||
+            doc.status === "Ready for Pick-up (Drop Off)" ||
+            doc.status === "In Transit (Mail Controller)" ||
+            doc.status === "In Transit - Rejected Document" ||
             doc.status === "Approved by Approver. Pending pickup for next step" ||
-            doc.status === "Approval Complete. Pending return to Originator"
+            doc.status === "Approval Complete. Pending return to Originator" ||
+            doc.status === "REJECTED - Ready for Pickup"
           
           // Documents that mail controller has handled before (for history)
           const hasMailHistory = doc.actionHistory.some(action => 

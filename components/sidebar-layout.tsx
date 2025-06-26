@@ -8,7 +8,9 @@ import {
   FileText, 
   Menu,
   X,
-  Home
+  Home,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react"
 import Link from "next/link"
 import { User as UserType } from "@/lib/types"
@@ -20,6 +22,7 @@ interface SidebarLayoutProps {
 export default function SidebarLayout({ children }: SidebarLayoutProps) {
   const [user, setUser] = useState<UserType | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -30,7 +33,20 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
       return
     }
     setUser(JSON.parse(userData))
+    
+    // Load sidebar collapsed state from localStorage
+    const collapsed = localStorage.getItem("sidebarCollapsed")
+    if (collapsed) {
+      setSidebarCollapsed(JSON.parse(collapsed))
+    }
   }, [router])
+
+  // Save sidebar collapsed state to localStorage
+  const toggleSidebarCollapsed = () => {
+    const newCollapsed = !sidebarCollapsed
+    setSidebarCollapsed(newCollapsed)
+    localStorage.setItem("sidebarCollapsed", JSON.stringify(newCollapsed))
+  }
 
   const menuItems = [
     {
@@ -67,48 +83,65 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
     return <div>Loading...</div>
   }
 
+  const sidebarWidth = sidebarCollapsed ? 'w-16' : 'w-64'
+
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
+      <div className={`fixed inset-y-0 left-0 z-50 ${sidebarWidth} bg-white shadow-lg transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} transition-all duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <FileText className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">DOCUMENT</h1>
-              <h1 className="text-lg font-bold text-gray-900 -mt-1">TRACKER</h1>
-            </div>
+            {!sidebarCollapsed && (
+              <div>
+                <h1 className="text-lg font-bold text-gray-900">DOCUMENT</h1>
+                <h1 className="text-lg font-bold text-gray-900 -mt-1">TRACKER</h1>
+              </div>
+            )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="lg:hidden"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center space-x-1">
+            {/* Desktop collapse button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden lg:flex"
+              onClick={toggleSidebarCollapsed}
+            >
+              {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </Button>
+            {/* Mobile close button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="lg:hidden"
+              onClick={() => setSidebarOpen(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
 
-                 <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
-           {menuItems.map((item) => {
-             if (!item.roles.includes(user.role)) return null
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
+          {menuItems.map((item) => {
+            if (!item.roles.includes(user.role)) return null
 
-             return (
-               <Link
-                 key={item.id}
-                 href={item.href}
-                 className={`flex items-center space-x-3 px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-100 transition-colors ${
-                   pathname === item.href ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600' : 'text-gray-700'
-                 }`}
-               >
-                 {item.icon}
-                 <span>{item.label}</span>
-               </Link>
-             )
-           })}
-         </nav>
+            return (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`flex items-center ${sidebarCollapsed ? 'justify-center' : 'space-x-3'} px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-100 transition-colors ${
+                  pathname === item.href ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-600' : 'text-gray-700'
+                }`}
+                title={sidebarCollapsed ? item.label : undefined}
+              >
+                {item.icon}
+                {!sidebarCollapsed && <span>{item.label}</span>}
+              </Link>
+            )
+          })}
+        </nav>
       </div>
 
       {/* Main Content */}

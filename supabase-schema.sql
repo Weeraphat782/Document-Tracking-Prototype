@@ -6,15 +6,23 @@ CREATE TYPE user_role AS ENUM ('admin', 'mail', 'approver', 'recipient');
 CREATE TYPE workflow_type AS ENUM ('flow', 'drop');
 CREATE TYPE approval_mode AS ENUM ('sequential', 'flexible');
 CREATE TYPE document_status AS ENUM (
-  'Ready for Pickup',
-  'In Transit', 
-  'With Approver for Review',
+  'NEW',
+  'Ready for Pick-up (Drop Off)',
+  'In Transit (Mail Controller)',
+  'In Transit - Rejected Document',
+  'Delivered (Drop Off)',
+  'Delivered (User)',
+  'Delivered (Hand to Hand)',
+  'Final Approval - Hand to Hand',
+  'Received (User)',
   'Approved by Approver. Pending pickup for next step',
   'Approval Complete. Pending return to Originator',
-  'Rejected. Awaiting Revision',
-  'Delivered',
-  'Completed and Archived',
-  'Cancelled'
+  'COMPLETED ROUTE',
+  'CANCELLED ROUTE',
+  'REJECTED ROUTE',
+  'REJECTED - Ready for Pickup',
+  'REJECTED - Hand to Hand',
+  'Closed'
 );
 
 -- Users table (for demo purposes - in production you'd use Supabase Auth)
@@ -49,7 +57,7 @@ CREATE TABLE documents (
   type TEXT NOT NULL,
   description TEXT,
   workflow workflow_type NOT NULL,
-  status document_status NOT NULL DEFAULT 'Ready for Pickup',
+  status document_status NOT NULL DEFAULT 'Ready for Pick-up (Drop Off)',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   created_by TEXT NOT NULL,

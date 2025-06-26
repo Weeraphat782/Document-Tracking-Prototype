@@ -167,7 +167,7 @@ export default function CoverSheetPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Success Alert */}
         <Alert className="mb-6 border-green-200 bg-green-50">
           <CheckCircle className="h-4 w-4 text-green-600" />
@@ -177,239 +177,124 @@ export default function CoverSheetPage() {
           </AlertDescription>
         </Alert>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Cover Sheet Preview */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Printer className="h-5 w-5 mr-2" />
-                  Cover Sheet Preview
-                </CardTitle>
-                <CardDescription>
-                  Print this cover sheet and attach it to your physical document
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="border-2 border-gray-400 p-6 bg-white rounded-lg shadow-sm">
-                  {/* Cover Sheet Content */}
-                  <div className="text-center border-b-2 border-gray-600 pb-4 mb-6">
-                    <h1 className="text-2xl font-bold text-gray-900">DOCUMENT TRACKING COVER SHEET</h1>
-                    <h2 className="text-xl font-semibold mt-2 text-gray-800">{document.id}</h2>
-                  </div>
+        {/* Cover Sheet Preview */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <Printer className="h-5 w-5 mr-2" />
+              Cover Sheet Preview
+            </CardTitle>
+            <CardDescription>
+              Print this cover sheet and attach it to your physical document
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="border-2 border-gray-400 p-6 bg-white rounded-lg shadow-sm">
+              {/* Cover Sheet Content */}
+              <div className="text-center border-b-2 border-gray-600 pb-4 mb-6">
+                <h1 className="text-2xl font-bold text-gray-900">DOCUMENT TRACKING COVER SHEET</h1>
+                <h2 className="text-xl font-semibold mt-2 text-gray-800">{document.id}</h2>
+              </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    {/* Document Information */}
-                    <div className="space-y-3">
-                      <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
-                        <span className="font-semibold text-gray-800">Document Title:</span>
-                        <span className="flex-1 text-right text-gray-900">{document.title}</span>
-                      </div>
-                      <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
-                        <span className="font-semibold text-gray-800">Document Type:</span>
-                        <span className="flex-1 text-right text-gray-900">{document.type}</span>
-                      </div>
-                      <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
-                        <span className="font-semibold text-gray-800">Workflow:</span>
-                        <span className="flex-1 text-right uppercase font-medium text-gray-900">
-                          {document.workflow}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Routing Information */}
-                    <div className="space-y-3">
-                      <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
-                        <span className="font-semibold text-gray-800">From:</span>
-                        <span className="flex-1 text-right text-gray-900">{document.createdBy}</span>
-                      </div>
-                      <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
-                        <span className="font-semibold text-gray-800">To:</span>
-                        <span className="flex-1 text-right text-gray-900">
-                          {document.workflow === "flow" && document.approvalSteps 
-                            ? document.approvalSteps[0].approverEmail 
-                            : document.recipient}
-                        </span>
-                      </div>
-                      <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
-                        <span className="font-semibold text-gray-800">Created:</span>
-                        <span className="flex-1 text-right text-gray-900">
-                          {new Date(document.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* QR Code Section */}
-                  <div className="text-center border-2 border-gray-400 p-4 mb-6 bg-gray-50">
-                    <h3 className="font-semibold mb-3 text-gray-900">QR CODE - SCAN TO TRACK</h3>
-                    <div className="flex justify-center mb-3">
-                      {qrCodeURL && (
-                        <img 
-                          src={qrCodeURL} 
-                          alt="Document QR Code" 
-                          className="w-32 h-32 border border-gray-300 bg-white p-2 rounded"
-                        />
-                      )}
-                    </div>
-                    <p className="font-semibold text-gray-900">Document ID: {document.id}</p>
-                    <p className="text-sm text-gray-700 mt-1">
-                      Scan this QR code at each step to update document status
-                    </p>
-                  </div>
-
-                  {/* Approval Hierarchy */}
-                  {document.workflow === "flow" && document.approvalSteps && (
-                    <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-6 border border-blue-200">
-                      <h3 className="font-semibold mb-3 text-gray-900">APPROVAL HIERARCHY</h3>
-                      <div className="space-y-2">
-                        {document.approvalSteps.map((step, index) => (
-                          <div key={step.approverEmail} className="flex items-center">
-                            <Badge variant="outline" className="mr-2 border-blue-300 text-blue-800">
-                              Step {index + 1}
-                            </Badge>
-                            <span className="text-gray-900">{step.approverEmail}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Instructions */}
-                  <div className="bg-amber-50 border-l-4 border-amber-500 p-4 border border-amber-200">
-                    <h4 className="font-semibold mb-2 text-gray-900">INSTRUCTIONS:</h4>
-                    <ol className="text-sm space-y-1 list-decimal list-inside text-gray-800">
-                      <li><strong>Mail Controller:</strong> Scan QR code when picking up and delivering documents</li>
-                      <li><strong>Approvers:</strong> Scan QR code when receiving documents for review</li>
-                      <li><strong>Recipients:</strong> Scan QR code to confirm receipt</li>
-                      <li><strong>Keep this cover sheet attached</strong> to the document at all times</li>
-                      <li>For questions, contact the document originator: {document.createdBy}</li>
-                    </ol>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Actions Panel */}
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Clock className="h-5 w-5 mr-2" />
-                  Next Steps
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* Document Information */}
                 <div className="space-y-3">
-                  <div className="flex items-center p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3">
-                      1
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">Print and attach to document</p>
-                      <p className="text-sm text-gray-600">Print the cover sheet below</p>
-                    </div>
+                  <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
+                    <span className="font-semibold text-gray-800">Document Title:</span>
+                    <span className="flex-1 text-right text-gray-900">{document.title}</span>
                   </div>
-                  
-                  <div className="flex items-center p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                    <div className="bg-amber-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3">
-                      2
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">Ready for mail pickup</p>
-                      <p className="text-sm text-gray-600">Mark when document is prepared</p>
-                    </div>
+                  <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
+                    <span className="font-semibold text-gray-800">Document Type:</span>
+                    <span className="flex-1 text-right text-gray-900">{document.type}</span>
                   </div>
-                  
-                  <div className="flex items-center p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="bg-green-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3">
-                      3
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">Monitor via dashboard</p>
-                      <p className="text-sm text-gray-600">Track progress in real-time</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Button 
-                    onClick={handlePrintCoverSheet} 
-                    className="w-full"
-                    disabled={isGenerating}
-                  >
-                    <Printer className="h-4 w-4 mr-2" />
-                    {isGenerating ? "Generating..." : "Print Cover Sheet"}
-                  </Button>
-                  
-                  <Button 
-                    onClick={handleMarkReady}
-                    variant="outline" 
-                    className="w-full"
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Mark as Ready for Pickup
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Document Details */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Document Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Status</p>
-                  <Badge variant="secondary">{document.status}</Badge>
-                </div>
-                
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Workflow Type</p>
-                  <div className="flex items-center mt-1">
-                    {document.workflow === "flow" ? (
-                      <Users className="h-4 w-4 mr-2 text-blue-500" />
-                    ) : (
-                      <User className="h-4 w-4 mr-2 text-green-500" />
-                    )}
-                    <span className="text-sm">
-                      {document.workflow === "flow" ? "Multi-level Approval" : "Direct Delivery"}
+                  <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
+                    <span className="font-semibold text-gray-800">Workflow:</span>
+                    <span className="flex-1 text-right uppercase font-medium text-gray-900">
+                      {document.workflow}
                     </span>
                   </div>
                 </div>
 
-                {document.workflow === "flow" && document.approvalSteps && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">
-                      Approvers ({document.approvalSteps.length})
-                    </p>
-                    <div className="mt-1 space-y-1">
-                      {document.approvalSteps.map((step, index) => (
-                        <p key={step.approverEmail} className="text-xs text-gray-500">
-                          {index + 1}. {step.approverEmail}
-                        </p>
-                      ))}
-                    </div>
+                {/* Routing Information */}
+                <div className="space-y-3">
+                  <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
+                    <span className="font-semibold text-gray-800">From:</span>
+                    <span className="flex-1 text-right text-gray-900">{document.createdBy}</span>
                   </div>
-                )}
-
-                {document.workflow === "drop" && document.recipient && (
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Recipient</p>
-                    <p className="text-sm">{document.recipient}</p>
+                  <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
+                    <span className="font-semibold text-gray-800">To:</span>
+                    <span className="flex-1 text-right text-gray-900">
+                      {document.workflow === "flow" && document.approvalSteps 
+                        ? document.approvalSteps[0].approverEmail 
+                        : document.recipient}
+                    </span>
                   </div>
-                )}
-
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Created</p>
-                  <p className="text-sm">{new Date(document.createdAt).toLocaleString()}</p>
+                  <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
+                    <span className="font-semibold text-gray-800">Created:</span>
+                    <span className="flex-1 text-right text-gray-900">
+                      {new Date(document.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
+              </div>
+
+              {/* QR Code Section */}
+              <div className="text-center border-2 border-gray-400 p-4 mb-6 bg-gray-50">
+                <h3 className="font-semibold mb-3 text-gray-900">QR CODE - SCAN TO TRACK</h3>
+                <div className="flex justify-center mb-3">
+                  {qrCodeURL && (
+                    <img 
+                      src={qrCodeURL} 
+                      alt="Document QR Code" 
+                      className="w-32 h-32 border border-gray-300 bg-white p-2 rounded"
+                    />
+                  )}
+                </div>
+                <p className="font-semibold text-gray-900">Document ID: {document.id}</p>
+                <p className="text-sm text-gray-700 mt-1">
+                  Scan this QR code at each step to update document status
+                </p>
+              </div>
+
+              {/* Approval Hierarchy */}
+              {document.workflow === "flow" && document.approvalSteps && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 border border-blue-200">
+                  <h3 className="font-semibold mb-3 text-gray-900">APPROVAL HIERARCHY</h3>
+                  <div className="space-y-2">
+                    {document.approvalSteps.map((step, index) => (
+                      <div key={step.approverEmail} className="flex items-center">
+                        <Badge variant="outline" className="mr-2 border-blue-300 text-blue-800">
+                          Step {index + 1}
+                        </Badge>
+                        <span className="text-gray-900">{step.approverEmail}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button 
+            onClick={handlePrintCoverSheet} 
+            size="lg"
+            disabled={isGenerating}
+          >
+            <Printer className="h-4 w-4 mr-2" />
+            {isGenerating ? "Generating..." : "Print Cover Sheet"}
+          </Button>
+          
+          <Button 
+            onClick={handleMarkReady}
+            variant="outline" 
+            size="lg"
+          >
+            <CheckCircle className="h-4 w-4 mr-2" />
+            Mark as Ready for Pickup
+          </Button>
         </div>
       </main>
     </div>
