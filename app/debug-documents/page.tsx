@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
 import { ArrowLeft, Database, Search, Plus } from "lucide-react"
 import Link from "next/link"
+import { Document } from '@/lib/types'
+import { convertLegacyToDualStatus, LEGACY_TO_DUAL_STATUS_MAP } from '@/lib/types'
 
 export default function DebugDocuments() {
   const [documentId, setDocumentId] = useState("")
@@ -15,6 +17,8 @@ export default function DebugDocuments() {
   const [isLoading, setIsLoading] = useState(false)
   const [allDocuments, setAllDocuments] = useState<any[]>([])
   const [createResult, setCreateResult] = useState<any>(null)
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(true)
 
   const searchDocument = async () => {
     if (!documentId.trim()) return
@@ -41,6 +45,7 @@ export default function DebugDocuments() {
       console.log("📋 Loading all documents...")
       const docs = await EnhancedDocumentService.getAllDocuments()
       setAllDocuments(docs)
+      setDocuments(docs)
       console.log("📊 Loaded documents:", docs.length)
     } catch (error) {
       console.error("❌ Load error:", error)
@@ -85,12 +90,37 @@ export default function DebugDocuments() {
       setAllDocuments([])
       setSearchResult(null)
       setCreateResult(null)
+      setDocuments([])
       console.log("✅ All documents cleared")
     } catch (error) {
       console.error("❌ Clear error:", error)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  useEffect(() => {
+    const fetchDocuments = async () => {
+      try {
+        const docs = await EnhancedDocumentService.getAllDocuments()
+        setDocuments(docs)
+      } catch (error) {
+        console.error('Error fetching documents:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDocuments()
+  }, [])
+
+  const testStatusConversion = (legacyStatus: string) => {
+    const mapping = convertLegacyToDualStatus(legacyStatus as any)
+    return mapping
+  }
+
+  if (loading) {
+    return <div className="p-8">Loading...</div>
   }
 
   return (
@@ -216,18 +246,52 @@ export default function DebugDocuments() {
           </Card>
         </div>
 
+        {/* Status Conversion Test */}
+        <div className="mb-8 p-4 border rounded-lg bg-gray-50">
+          <h2 className="text-lg font-semibold mb-4">Status Conversion Test</h2>
+          <div className="space-y-2">
+            <div>
+              <strong>REJECTED - Returned to Originator:</strong>
+              {JSON.stringify(testStatusConversion("REJECTED - Returned to Originator"))}
+            </div>
+            <div>
+              <strong>In Transit - Rejected Document:</strong>
+              {JSON.stringify(testStatusConversion("In Transit - Rejected Document"))}
+            </div>
+            <div>
+              <strong>Delivered (Drop Off):</strong>
+              {JSON.stringify(testStatusConversion("Delivered (Drop Off)"))}
+            </div>
+          </div>
+        </div>
+
+        {/* Full Status Mapping */}
+        <div className="mb-8 p-4 border rounded-lg bg-blue-50">
+          <h2 className="text-lg font-semibold mb-4">Full Status Mapping</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            {Object.entries(LEGACY_TO_DUAL_STATUS_MAP).map(([legacy, dual]) => (
+              <div key={legacy} className="p-2 bg-white rounded border">
+                <div className="font-medium">{legacy}</div>
+                <div className="text-gray-600">
+                  Doc: {dual.documentStatus} | Track: {dual.trackingStatus}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* All Documents */}
-        {allDocuments.length > 0 && (
+        {documents.length > 0 && (
           <Card className="mt-8">
             <CardHeader>
-              <CardTitle>All Documents ({allDocuments.length})</CardTitle>
+              <CardTitle>All Documents ({documents.length})</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {allDocuments.map((doc, index) => (
+                {documents.map((doc, index) => (
                   <div key={index} className="border rounded-lg p-4">
-                    {doc.error ? (
-                      <div className="text-red-600">Error: {doc.error}</div>
+                    {(doc as any).error ? (
+                      <div className="text-red-600">Error: {(doc as any).error}</div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div>
@@ -239,12 +303,28 @@ export default function DebugDocuments() {
                           {doc.title}
                         </div>
                         <div>
-                          <strong>Status:</strong><br />
-                          <Badge variant="outline">{doc.status}</Badge>
+                          <strong>Legacy Status:</strong><br />
+                          {doc.status}
+                        </div>
+                        <div>
+                          <strong>Document Status:</strong><br />
+                          {doc.documentStatus || 'Not Set'}
+                        </div>
+                        <div>
+                          <strong>Tracking Status:</strong><br />
+                          {doc.trackingStatus || 'Not Set'}
+                        </div>
+                        <div>
+                          <strong>Expected Dual Status:</strong><br />
+                          {JSON.stringify(convertLegacyToDualStatus(doc.status))}
                         </div>
                         <div>
                           <strong>Created:</strong><br />
-                          {new Date(doc.createdAt).toLocaleDateString()}
+                          {new Date(doc.createdAt).toLocaleString()}
+                        </div>
+                        <div>
+                          <strong>Updated:</strong><br />
+                          {doc.updatedAt ? new Date(doc.updatedAt).toLocaleString() : 'Never'}
                         </div>
                       </div>
                     )}
