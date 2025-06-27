@@ -525,6 +525,66 @@ function CreateDocumentContent() {
                               </div>
               )}
 
+              {/* Approval Mode Selection */}
+              <div className="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <Users className="h-5 w-5 text-gray-600" />
+                  <h4 className="font-medium text-gray-800">Approval Workflow Mode</h4>
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex items-start space-x-3">
+                    <input
+                      type="radio"
+                      id="sequential"
+                      name="approvalMode"
+                      value="sequential"
+                      checked={approvalMode === "sequential"}
+                      onChange={(e) => setApprovalMode(e.target.value as ApprovalMode)}
+                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="sequential" className="font-medium text-gray-800 cursor-pointer">
+                        Sequential Approval (เรียงกัน)
+                      </Label>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Approvers must review in order. If one person is unavailable, the document will wait for them.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-start space-x-3">
+                    <input
+                      type="radio"
+                      id="flexible"
+                      name="approvalMode"
+                      value="flexible"
+                      checked={approvalMode === "flexible"}
+                      onChange={(e) => setApprovalMode(e.target.value as ApprovalMode)}
+                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                    />
+                    <div className="flex-1">
+                      <Label htmlFor="flexible" className="font-medium text-gray-800 cursor-pointer">
+                        Flexible Approval (ข้ามได้)
+                      </Label>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Approvers can review in any order. If one person is unavailable, others can still proceed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-2 p-3 bg-blue-50 border border-blue-200 rounded">
+                  <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-sm text-blue-800">
+                    <strong>Example:</strong> {approvalMode === "sequential" 
+                      ? "If approver #2 is on leave, the document will wait for them before proceeding to approver #3."
+                      : "If approver #2 is on leave, approver #3 can still review and approve the document."
+                    }
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-4">
                 <Label>Approvers *</Label>
 

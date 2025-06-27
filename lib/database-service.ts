@@ -314,6 +314,9 @@ export class DatabaseService {
               // Check if user is the current step approver
               const isCurrentStep = doc.approvalSteps[doc.currentStepIndex || 0]?.approverEmail === user.email
               
+              // Check approval mode (default to sequential if not set)
+              const approvalMode = doc.approvalMode || "sequential"
+              
               // Show documents that are:
               // 1. Pending for this approver
               // 2. Hand-to-hand delivered to this approver
@@ -325,8 +328,21 @@ export class DatabaseService {
               
               const isReceivedByUser = doc.status === "Received (User)" && isCurrentStep
               
-              return isCurrentStep && (userStep.status === "pending" && (isHandToHandRecipient || isReceivedByUser || 
-                !["Delivered (Hand to Hand)", "REJECTED - Hand to Hand", "Received (User)"].includes(doc.status)))
+              // Check if document is in a deliverable state
+              const isDelivered = [
+                "Delivered (Drop Off)",
+                "Delivered (Hand to Hand)", 
+                "Received (User)",
+                "With Approver for Review"
+              ].includes(doc.status)
+              
+              if (approvalMode === "flexible") {
+                // Flexible mode: any pending approver can see delivered documents
+                return userStep.status === "pending" && (isDelivered || isHandToHandRecipient || isReceivedByUser)
+              } else {
+                // Sequential mode: only current step approver can see
+                return isCurrentStep && userStep.status === "pending" && (isDelivered || isHandToHandRecipient || isReceivedByUser)
+              }
             }
             return false
           })
@@ -530,6 +546,9 @@ export class DatabaseService {
             // Check if user is the current step approver
             const isCurrentStep = doc.approvalSteps[doc.currentStepIndex || 0]?.approverEmail === user.email
             
+            // Check approval mode (default to sequential if not set)
+            const approvalMode = doc.approvalMode || "sequential"
+            
             // Show documents that are:
             // 1. Pending for this approver
             // 2. Hand-to-hand delivered to this approver
@@ -541,8 +560,21 @@ export class DatabaseService {
             
             const isReceivedByUser = doc.status === "Received (User)" && isCurrentStep
             
-            return isCurrentStep && (userStep.status === "pending" && (isHandToHandRecipient || isReceivedByUser || 
-              !["Delivered (Hand to Hand)", "REJECTED - Hand to Hand", "Received (User)"].includes(doc.status)))
+            // Check if document is in a deliverable state
+            const isDelivered = [
+              "Delivered (Drop Off)",
+              "Delivered (Hand to Hand)", 
+              "Received (User)",
+              "With Approver for Review"
+            ].includes(doc.status)
+            
+            if (approvalMode === "flexible") {
+              // Flexible mode: any pending approver can see delivered documents
+              return userStep.status === "pending" && (isDelivered || isHandToHandRecipient || isReceivedByUser)
+            } else {
+              // Sequential mode: only current step approver can see
+              return isCurrentStep && userStep.status === "pending" && (isDelivered || isHandToHandRecipient || isReceivedByUser)
+            }
           }
           return false
         })

@@ -778,17 +778,41 @@ export default function Dashboard() {
       return null
     }
 
+    // Check if document is in a state where approvers can act
+    const canApproversAct = [
+      "Delivered (Drop Off)",
+      "Delivered (Hand to Hand)", 
+      "Received (User)",
+      "With Approver for Review"
+    ].includes(document.status)
+
+    if (!canApproversAct) {
+      return (
+        <Badge className="bg-gray-100 text-gray-600 text-xs ml-2">
+          <Clock className="h-3 w-3 mr-1" />
+          In Transit
+        </Badge>
+      )
+    }
+
     const currentStepIndex = document.currentStepIndex || 0
     const isCurrentTurn = document.approvalSteps[currentStepIndex]?.approverEmail === user.email
+    
+    // Default to sequential if approvalMode is not set
+    const approvalMode = document.approvalMode || "sequential"
 
-    if (document.approvalMode === "flexible") {
+    // Debug logging
+    console.log(`Document ${document.id}: approvalMode=${approvalMode}, isCurrentTurn=${isCurrentTurn}, userEmail=${user.email}, status=${document.status}`)
+
+    if (approvalMode === "flexible") {
+      // In flexible mode, any pending approver can review if document is delivered
       return (
         <Badge className="bg-green-100 text-green-800 text-xs ml-2">
           <CheckCircle className="h-3 w-3 mr-1" />
           Ready to Review
         </Badge>
       )
-    } else if (document.approvalMode === "sequential") {
+    } else if (approvalMode === "sequential") {
       if (isCurrentTurn) {
         return (
           <Badge className="bg-green-100 text-green-800 text-xs ml-2">

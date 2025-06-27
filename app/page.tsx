@@ -78,7 +78,7 @@ export default function LoginPage() {
         {/* Login Form */}
         <Card className="w-full">
           <CardHeader className="text-center pb-4 sm:pb-6">
-            <CardTitle className="text-xl sm:text-2xl font-bold">Document Tracking System</CardTitle>
+            <CardTitle className="text-xl sm:text-2xl font-bold">ServiceMind</CardTitle>
             <CardDescription className="text-sm sm:text-base">Login to access the document workflow system</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 sm:space-y-4">

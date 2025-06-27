@@ -7,9 +7,9 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Document Tracking System',
+  title: 'ServiceMind',
   description: 'Comprehensive document workflow and tracking system',
-  generator: 'Document Tracker v1.0',
+  generator: 'ServiceMind v1.0',
 }
 
 export default function RootLayout({

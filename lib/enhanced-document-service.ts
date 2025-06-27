@@ -97,6 +97,13 @@ export class EnhancedDocumentService {
     return doc
   }
 
+  // Update document
+  static async updateDocument(document: Document): Promise<void> {
+    console.log("EnhancedDocumentService.updateDocument called for document:", document.id)
+    await DatabaseService.updateDocument(document)
+    console.log("Document updated successfully:", document.id)
+  }
+
   // Process QR scan and update document
   static async processScan(
     documentId: string, 
@@ -533,10 +540,30 @@ export class EnhancedDocumentService {
         "flow",
         "admin@company.com",
         "Request for new laptops and office chairs",
-        ["manager@company.com", "finance@company.com"]
+        ["manager@company.com", "finance@company.com"],
+        undefined,
+        "sequential"
       )
-      
+
       const doc2 = await this.createDocument(
+        "Flexible Approval Test Document",
+        "test-template",
+        "flow",
+        "admin@company.com",
+        "Testing flexible approval workflow",
+        ["qwe", "qwer"],
+        undefined,
+        "flexible"
+      )
+
+      // Simulate document delivery to make it available for approvers
+      if (doc2) {
+        doc2.status = "Delivered (Drop Off)"
+        await DatabaseService.updateDocument(doc2)
+        console.log("✅ Flexible test document status updated to 'Delivered (Drop Off)'")
+      }
+      
+      const doc3 = await this.createDocument(
         "Monthly Sales Report",
         "monthly-report",
         "drop", 

@@ -96,8 +96,8 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
             </div>
             {!sidebarCollapsed && (
               <div>
-                <h1 className="text-lg font-bold text-gray-900">DOCUMENT</h1>
-                <h1 className="text-lg font-bold text-gray-900 -mt-1">TRACKER</h1>
+                <h1 className="text-lg font-bold text-gray-900">SERVICE</h1>
+                <h1 className="text-lg font-bold text-gray-900 -mt-1">MIND</h1>
               </div>
             )}
           </div>
@@ -163,7 +163,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-500">Company</span>
                   <select className="text-sm border border-gray-300 rounded px-2 py-1 bg-white">
-                    <option>Document Tracker</option>
+                    <option>ServiceMind</option>
                   </select>
                 </div>
               </div>
