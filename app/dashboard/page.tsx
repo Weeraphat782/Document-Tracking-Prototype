@@ -834,6 +834,74 @@ export default function Dashboard() {
   }
 
   // Get current location based on document status
+  const getNextRecipient = (document: Document) => {
+    // Determine who will receive the document next based on current status and workflow
+    switch (document.status) {
+      case "NEW":
+        return "Admin (Select delivery method)"
+      
+      case "Ready for Pick-up (Drop Off)":
+      case "REJECTED - Ready for Pickup":
+        return "Mail Controller"
+      
+      case "In Transit (Mail Controller)":
+      case "In Transit - Rejected Document":
+        if (document.workflow === "flow" && document.approvalSteps) {
+          const currentStep = document.approvalSteps[document.currentStepIndex || 0]
+          if (currentStep) {
+            return currentStep.approverName || currentStep.approverEmail.split('@')[0]
+          }
+        }
+        return document.recipient?.split('@')[0] || "Recipient"
+      
+      case "Delivered (Drop Off)":
+      case "Delivered (Hand to Hand)":
+        if (document.workflow === "flow" && document.approvalSteps) {
+          const currentStep = document.approvalSteps[document.currentStepIndex || 0]
+          if (currentStep && currentStep.status === "pending") {
+            return `${currentStep.approverName || currentStep.approverEmail.split('@')[0]} (Receive)`
+          }
+        }
+        return `${document.recipient?.split('@')[0] || "Recipient"} (Receive)`
+      
+      case "Received (User)":
+        if (document.workflow === "flow" && document.approvalSteps) {
+          const currentStep = document.approvalSteps[document.currentStepIndex || 0]
+          if (currentStep && currentStep.status === "pending") {
+            return `${currentStep.approverName || currentStep.approverEmail.split('@')[0]} (Review)`
+          }
+        }
+        return `${document.recipient?.split('@')[0] || "Recipient"} (Review)`
+      
+      case "Final Approval - Hand to Hand":
+      case "Final Approval - Delivered to Originator":
+        return "Admin (Close workflow)"
+      
+      case "REJECTED ROUTE":
+      case "REJECTED - Returned to Originator":
+        return "Admin (Create revision)"
+      
+      case "COMPLETED ROUTE":
+      case "CANCELLED ROUTE":
+        return "Archived"
+      
+      default:
+        // Check if there's a next approver in the workflow
+        if (document.workflow === "flow" && document.approvalSteps) {
+          const nextPendingStep = document.approvalSteps.find(step => step.status === "pending")
+          if (nextPendingStep) {
+            return nextPendingStep.approverName || nextPendingStep.approverEmail.split('@')[0]
+          }
+          // Check if workflow is complete
+          const allApproved = document.approvalSteps.every(step => step.status === "approved")
+          if (allApproved) {
+            return "Admin (Close workflow)"
+          }
+        }
+        return "Processing"
+    }
+  }
+
   const getCurrentLocation = (document: Document) => {
     // Sample locations for demonstration (matching the image data)
     const sampleLocations: { [key: string]: string } = {
@@ -877,9 +945,36 @@ export default function Dashboard() {
         }
       
       case "Delivered (Drop Off)":
+        // Document delivered via mail controller - still with mail controller until received
+        if (document.workflow === "flow" && document.approvalSteps) {
+          const currentStep = document.approvalSteps[document.currentStepIndex || 0]
+          if (currentStep && currentStep.status === "pending") {
+            return {
+              user: "Mail Controller",
+              location: "In Transit Vehicle",
+              status: "Delivered, awaiting receipt confirmation"
+            }
+          }
+        }
+        // For drop workflow - still with mail controller
+        return {
+          user: "Mail Controller", 
+          location: "In Transit Vehicle",
+          status: "Delivered, awaiting receipt confirmation"
+        }
+      
       case "Delivered (Hand to Hand)":
+        // Document delivered hand-to-hand - still with originator until received
+        const originatorName = document.createdBy.split('@')[0]
+        const originatorLocation = sampleLocations[document.createdBy] || sampleLocations[originatorName] || "Building A, Floor 2, Room 201"
+        return {
+          user: originatorName,
+          location: originatorLocation,
+          status: "Delivered hand-to-hand, awaiting receipt confirmation"
+        }
+      
       case "Received (User)":
-        // Find current approver or recipient
+        // Now the approver/recipient has received the document
         if (document.workflow === "flow" && document.approvalSteps) {
           const currentStep = document.approvalSteps[document.currentStepIndex || 0]
           if (currentStep && currentStep.status === "pending") {
@@ -888,7 +983,7 @@ export default function Dashboard() {
             return {
               user: approverName,
               location: location,
-              status: "With Approver"
+              status: "With Approver (Received)"
             }
           }
           // If no pending step, check for current delivery destination
@@ -899,7 +994,7 @@ export default function Dashboard() {
             return {
               user: approverName,
               location: location,
-              status: "Current delivery destination"
+              status: "With Approver (Received)"
             }
           }
         }
@@ -908,7 +1003,7 @@ export default function Dashboard() {
         return {
           user: recipientName,
           location: sampleLocations[recipientName] || "Office Location",
-          status: "With Recipient"
+          status: "With Recipient (Received)"
         }
       
       case "Final Approval - Hand to Hand":
@@ -1039,6 +1134,7 @@ export default function Dashboard() {
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document Status</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracking Status</th>
+                    <th className="hidden xl:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Recipient</th>
                     <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Location</th>
                     <th className="hidden md:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
                     <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workflow</th>
@@ -1051,6 +1147,7 @@ export default function Dashboard() {
                     const workflowInfo = getWorkflowInfo(doc)
                     const dualStatusDisplay = getDualStatusDisplay(doc)
                     const currentLocation = getCurrentLocation(doc)
+                    const nextRecipient = getNextRecipient(doc)
                     const srNo = startIndex + index + 1
                     return (
                       <tr key={doc.id} className="hover:bg-gray-50">
@@ -1083,6 +1180,11 @@ export default function Dashboard() {
                         </td>
                         <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
                           {renderStatusBadge(dualStatusDisplay.trackingStatus, 'tracking')}
+                        </td>
+                        <td className="hidden xl:table-cell px-2 sm:px-4 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-blue-600">
+                            {nextRecipient}
+                          </div>
                         </td>
                         <td className="hidden lg:table-cell px-2 sm:px-4 py-4">
                           <div className="text-sm">
@@ -1185,23 +1287,35 @@ export default function Dashboard() {
         </div>
 
         {/* Page Title */}
-        <div className="mb-6 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">Document Distribution System</h1>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Document Distribution System</h1>
           {user.role === "admin" && (
-            <Link href="/create-document">
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add new Document
-              </Button>
-            </Link>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <Link href="/scan-qr" className="w-full sm:w-auto">
+                <Button variant="outline" className="w-full sm:w-auto">
+                  <QrCode className="h-4 w-4 mr-2" />
+                  <span className="hidden xs:inline">Scan QR Code</span>
+                  <span className="xs:hidden">Scan QR</span>
+                </Button>
+              </Link>
+              <Link href="/create-document" className="w-full sm:w-auto">
+                <Button className="w-full sm:w-auto">
+                  <Plus className="h-4 w-4 mr-2" />
+                  <span className="hidden xs:inline">Add new Document</span>
+                  <span className="xs:hidden">Add Document</span>
+                </Button>
+              </Link>
+            </div>
           )}
         </div>
 
         {/* Role-specific Actions */}
         {getRoleActions()}
 
-        {/* System Statistics (for admin) */}
-        {user.role === "admin" && (
+
+
+        {/* System Statistics (for admin) - Hidden */}
+        {false && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Card>
               <CardContent className="p-4">
@@ -1304,6 +1418,16 @@ export default function Dashboard() {
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="flex items-center space-x-2 w-fit">
+                  <input
+                    type="checkbox"
+                    id="hideOtherAccounts"
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="hideOtherAccounts" className="text-sm font-medium text-gray-700 cursor-pointer whitespace-nowrap">
+                    Hide other accounts except me
+                  </label>
+                </div>
               </div>
               <div className="relative">
                 <Search className="h-4 w-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
