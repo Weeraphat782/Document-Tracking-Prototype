@@ -248,46 +248,65 @@ export class CoverSheetGenerator {
             }
             .approval-hierarchy h3 {
               color: #111827;
-              margin: 0 0 10px 0;
+              margin: 0 0 15px 0;
             }
-            .approval-step {
-              margin: 5px 0;
-              padding: 5px;
-              color: #374151;
-            }
-            .instructions {
-              margin-top: 20px;
-              padding: 15px;
-              background: #fef3c7;
-              border-left: 4px solid #f59e0b;
-              border: 1px solid #fcd34d;
+            .approval-table {
+              width: 100%;
+              border-collapse: collapse;
+              background: white;
+              border: 1px solid #d1d5db;
               font-size: 14px;
             }
-            .instructions h4 {
+            .approval-table th {
+              background: #f3f4f6;
+              border: 1px solid #d1d5db;
+              padding: 8px;
+              text-align: left;
+              font-weight: bold;
               color: #111827;
-              margin: 0 0 10px 0;
             }
-            .instructions ol {
+            .approval-table td {
+              border: 1px solid #d1d5db;
+              padding: 8px;
               color: #374151;
-              margin: 0;
-              padding-left: 20px;
             }
-            .instructions li {
-              margin: 5px 0;
+            .approval-table .step-cell {
+              text-align: center;
+              font-weight: bold;
             }
+            .approval-table .checkbox-cell {
+              text-align: center;
+            }
+            .checkbox-square {
+              width: 20px;
+              height: 20px;
+              border: 2px solid;
+              display: inline-block;
+            }
+            .checkbox-accepted {
+              border-color: #059669;
+            }
+            .checkbox-rejected {
+              border-color: #dc2626;
+            }
+            .comment-line {
+              border-bottom: 1px dotted #d1d5db;
+              min-height: 16px;
+              width: 100%;
+            }
+
             @media print {
               body { margin: 0; }
               .cover-sheet { border: 2px solid #374151; }
               .qr-section { background: #f9fafb !important; }
               .approval-hierarchy { background: #eff6ff !important; }
-              .instructions { background: #fef3c7 !important; }
             }
           </style>
         </head>
         <body>
           <div class="cover-sheet">
             <div class="header">
-              <h1>DOCUMENT TRACKING COVER SHEET</h1>
+              <h1>DISTRIBUTION LIST</h1>
               <h2>${documentId}</h2>
             </div>
             
@@ -331,35 +350,46 @@ export class CoverSheetGenerator {
 
             ${approvalHierarchy && approvalHierarchy.length > 0 ? `
               <div class="approval-hierarchy">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                  <h3>APPROVAL HIERARCHY</h3>
-                  <span style="background: #dcfce7; 
-                               color: #166534; 
-                               padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
-                    Flexible (ข้ามได้)
-                  </span>
-                </div>
-                ${approvalHierarchy.map((approver, index) => `
-                  <div class="approval-step">
-                    <strong>Step ${index + 1}:</strong> ${approver}
-                  </div>
-                `).join('')}
-                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #bfdbfe; font-size: 12px; color: #1e40af;">
-                  <strong>Mode:</strong> Recipients can review in any order
+                <h3>APPROVAL HIERARCHY</h3>
+                
+                <table class="approval-table">
+                  <thead>
+                    <tr>
+                      <th style="text-align: center;">Step</th>
+                      <th>Recipient</th>
+                      <th style="text-align: center;">✓ ACCEPTED</th>
+                      <th style="text-align: center;">✗ REJECTED</th>
+                      <th>Comments</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${approvalHierarchy.map((approver, index) => `
+                      <tr>
+                        <td class="step-cell">${index + 1}</td>
+                        <td>${approver}</td>
+                        <td class="checkbox-cell">
+                          <div class="checkbox-square checkbox-accepted"></div>
+                        </td>
+                        <td class="checkbox-cell">
+                          <div class="checkbox-square checkbox-rejected"></div>
+                        </td>
+                        <td>
+                          <div class="comment-line"></div>
+                        </td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+                
+                <div style="margin-top: 10px;">
+                  <p style="font-size: 12px; color: #1e40af;">
+                    <strong>Instructions:</strong> Each recipient should tick either ACCEPTED (✓) or REJECTED (✗) and add comments if needed.
+                  </p>
                 </div>
               </div>
             ` : ''}
 
-            <div class="instructions">
-              <h4>INSTRUCTIONS:</h4>
-              <ol>
-                <li><strong>Mail Controller:</strong> Scan QR code when picking up and delivering documents</li>
-                <li><strong>Recipients:</strong> Scan QR code when receiving documents for review</li>
-                <li><strong>Recipients:</strong> Scan QR code to confirm receipt</li>
-                <li><strong>Keep this cover sheet attached</strong> to the document at all times</li>
-                <li>For questions, contact the document originator: ${from}</li>
-              </ol>
-            </div>
+
           </div>
         </body>
       </html>
