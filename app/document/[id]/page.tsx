@@ -211,7 +211,7 @@ export default function DocumentDetailPage() {
           if (approvedActions.length > 0) {
             const lastApprover = approvedActions[0].performedBy
             const approverStep = document.approvalSteps.find(step => step.approverEmail === lastApprover)
-            return approverStep?.dropOffLocation || "Approver location not set"
+            return approverStep?.dropOffLocation || "Recipient location not set"
           }
         }
         return document.createdByDropOffLocation || "Location not set"
@@ -229,7 +229,7 @@ export default function DocumentDetailPage() {
           const deliveryIndex = deliveryActions.findIndex(a => a.id === action.id)
           
           if (deliveryIndex >= 0 && deliveryIndex < document.approvalSteps.length) {
-            return document.approvalSteps[deliveryIndex].dropOffLocation || "Approver location not set"
+            return document.approvalSteps[deliveryIndex].dropOffLocation || "Recipient location not set"
           }
         } else if (action.newStatus === "Delivered") {
           // Final delivery back to creator
@@ -388,7 +388,7 @@ export default function DocumentDetailPage() {
                     Approval Hierarchy
                   </CardTitle>
                   <CardDescription className="text-sm">
-                    Document approval progress and hierarchy - approvers can review in any order
+                    Document approval progress and hierarchy - recipients can review in any order
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-3 sm:pt-6">
@@ -491,7 +491,7 @@ export default function DocumentDetailPage() {
                   {/* Approver Locations (for Flow workflow) */}
                   {document.workflow === "flow" && document.approvalSteps && (
                     <div className="space-y-2">
-                      <h4 className="font-medium text-sm text-orange-800">Approver Locations:</h4>
+                      <h4 className="font-medium text-sm text-orange-800">Recipient Locations:</h4>
                       {document.approvalSteps.map((step, index) => (
                         <div 
                           key={step.approverEmail}

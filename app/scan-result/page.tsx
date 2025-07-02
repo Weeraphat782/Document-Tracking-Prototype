@@ -205,7 +205,7 @@ export default function ScanResult() {
                     </div>
                     <div className="flex-1">
                       <p className="font-medium">{approver}</p>
-                      <p className="text-sm text-gray-600">{index === 0 ? "Next approver" : "Pending"}</p>
+                      <p className="text-sm text-gray-600">{index === 0 ? "Next recipient" : "Pending"}</p>
                     </div>
                     {index === 0 && (
                       <Badge variant="outline" className="bg-blue-50 text-blue-700">

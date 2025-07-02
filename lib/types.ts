@@ -20,7 +20,7 @@ export type DocumentStatusNew =
   | "ACCEPTED"        // Document has been accepted/approved
   | "REJECTED"        // Document has been rejected
 
-// Tracking Status - represents the physical/logistical state  
+// Tracking Status - represents the physical/logistical state
 export type TrackingStatus = 
   | "NEW"                 // Document just created, can edit details
   | "READY_FOR_PICKUP"    // Released for pickup, no more editing

@@ -36,8 +36,8 @@ export default function LoginPage() {
     {
       email: "manager@company.com",
       role: "approver", 
-      name: "Approver/Signer",
-      description: "Receive, review, approve, or reject documents",
+      name: "Recipient",
+      description: "Receive, review, accept, or reject documents",
       icon: <CheckCircle className="h-4 w-4" />,
       color: "bg-orange-100 text-orange-800"
     },
@@ -115,15 +115,10 @@ export default function LoginPage() {
                   <SelectItem value="approver">
                     <div className="flex items-center space-x-2">
                       <CheckCircle className="h-4 w-4 text-orange-600" />
-                      <span>Approver/Signer</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="recipient">
-                    <div className="flex items-center space-x-2">
-                      <User className="h-4 w-4 text-green-600" />
                       <span>Recipient</span>
                     </div>
                   </SelectItem>
+
                 </SelectContent>
               </Select>
               
@@ -156,7 +151,7 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {demoUsers.map((user) => (
+            {demoUsers.filter(user => user.role !== "recipient").map((user) => (
               <div 
                 key={user.role}
                 className="p-3 sm:p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"

@@ -322,7 +322,7 @@ export default function Dashboard() {
       case "approver":
         return (
           <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-            <h3 className="text-lg font-semibold mb-4">Approver Actions</h3>
+                          <h3 className="text-lg font-semibold mb-4">Recipient Actions</h3>
             <div className="flex flex-wrap gap-2">
               <Link href="/scan-qr">
                 <Button size="sm">

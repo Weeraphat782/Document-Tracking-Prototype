@@ -345,7 +345,7 @@ export class CoverSheetGenerator {
                   </div>
                 `).join('')}
                 <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #bfdbfe; font-size: 12px; color: #1e40af;">
-                  <strong>Mode:</strong> Approvers can review in any order
+                  <strong>Mode:</strong> Recipients can review in any order
                 </div>
               </div>
             ` : ''}
@@ -354,7 +354,7 @@ export class CoverSheetGenerator {
               <h4>INSTRUCTIONS:</h4>
               <ol>
                 <li><strong>Mail Controller:</strong> Scan QR code when picking up and delivering documents</li>
-                <li><strong>Approvers:</strong> Scan QR code when receiving documents for review</li>
+                <li><strong>Recipients:</strong> Scan QR code when receiving documents for review</li>
                 <li><strong>Recipients:</strong> Scan QR code to confirm receipt</li>
                 <li><strong>Keep this cover sheet attached</strong> to the document at all times</li>
                 <li>For questions, contact the document originator: ${from}</li>

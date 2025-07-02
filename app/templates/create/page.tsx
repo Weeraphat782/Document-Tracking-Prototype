@@ -178,19 +178,19 @@ export default function CreateTemplate() {
           {/* Default Approvers */}
           <Card>
             <CardHeader>
-              <CardTitle>Default Approvers</CardTitle>
-              <p className="text-sm text-gray-600">Define default approvers for this template (will be loaded automatically when creating documents)</p>
+                          <CardTitle>Default Recipients</CardTitle>
+            <p className="text-sm text-gray-600">Define default recipients for this template (will be loaded automatically when creating documents)</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-4">
-                <Label>Default Approvers *</Label>
+                <Label>Default Recipients *</Label>
 
                 <div className="space-y-3">
                   {defaultApprovers.length === 0 ? (
                     <div className="flex items-center space-x-2">
                       <Badge variant="outline">1</Badge>
                       <Input
-                        placeholder="Enter approver email address"
+                        placeholder="Enter recipient email address"
                         value=""
                         onChange={(e) => setDefaultApprovers([e.target.value])}
                         className="flex-1"
@@ -209,7 +209,7 @@ export default function CreateTemplate() {
                         <Badge variant="outline">{index + 1}</Badge>
                         <div className="flex-1 relative">
                           <Input
-                            placeholder="Enter approver email address"
+                            placeholder="Enter recipient email address"
                             value={email}
                             onChange={(e) => updateApprover(index, e.target.value)}
                           />
@@ -240,7 +240,7 @@ export default function CreateTemplate() {
               {defaultApprovers.filter(email => email.trim() !== "").length > 0 && (
                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-xs text-blue-600">
-                    💡 When someone selects this template, these approvers will be automatically loaded in the document creation process
+                    💡 When someone selects this template, these recipients will be automatically loaded in the document creation process
                   </p>
                 </div>
               )}

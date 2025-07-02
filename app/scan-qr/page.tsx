@@ -75,7 +75,7 @@ export default function ScanQR() {
               title: isFirstScan ? "First Scan - Pickup Required" : "Pickup Required",
               description: isFirstScan 
                 ? "This is your first scan of this document. Pickup action has been automatically selected."
-                : "Document has been processed by approver. Pickup action has been automatically selected.",
+                : "Document has been processed by recipient. Pickup action has been automatically selected.",
             })
           }
         } else if (availableActions[0] === "deliver") {
@@ -113,7 +113,7 @@ export default function ScanQR() {
           case "receive":
             return { value: "receive", label: user.role === "recipient" ? "Confirm Receipt" : "Receive for Review", description: user.role === "recipient" ? "Confirm document receipt" : "Confirm receipt of document" }
           case "approve":
-            return { value: "approve", label: "Approve and Send", description: "Approve and send to next step" }
+            return { value: "approve", label: "Accept and Send", description: "Accept and send to next step" }
           case "reject":
             return { value: "reject", label: "Reject and Send", description: "Reject and return for revision" }
           case "close":
@@ -136,7 +136,7 @@ export default function ScanQR() {
       case "approver":
         return [
           { value: "receive", label: "Receive for Review", description: "Confirm receipt of document" },
-          { value: "approve", label: "Approve and Send", description: "Approve and send to next step" },
+          { value: "approve", label: "Accept and Send", description: "Accept and send to next step" },
           { value: "reject", label: "Reject and Send", description: "Reject and return for revision" },
         ]
       case "recipient":

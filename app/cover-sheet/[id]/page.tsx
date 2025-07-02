@@ -113,8 +113,8 @@ export default function CoverSheetPage() {
     if (!document || !user) return
 
     toast({
-      title: "Document Ready",
-      description: "Document has been marked as ready for pickup. Mail controller will be notified.",
+      title: "Document Submitted",
+      description: "Document has been submitted successfully. Mail controller will be notified for pickup.",
     })
 
     // Redirect back to dashboard
@@ -193,7 +193,7 @@ export default function CoverSheetPage() {
             <div className="border-2 border-gray-400 p-6 bg-white rounded-lg shadow-sm">
               {/* Cover Sheet Content */}
               <div className="text-center border-b-2 border-gray-600 pb-4 mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">DOCUMENT TRACKING COVER SHEET</h1>
+                <h1 className="text-2xl font-bold text-gray-900">DISTRIBUTION LIST</h1>
                 <h2 className="text-xl font-semibold mt-2 text-gray-800">{document.id}</h2>
               </div>
 
@@ -259,23 +259,48 @@ export default function CoverSheetPage() {
 
               {/* Approval Hierarchy */}
               {document.workflow === "flow" && document.approvalSteps && (
-                <div className="bg-blue-50 border-l-4 border-blue-500 p-4 border border-blue-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-gray-900">APPROVAL HIERARCHY</h3>
+                <div className="bg-blue-50 border-l-4 border-blue-500 p-3 border border-blue-200">
+                  <h3 className="font-semibold text-gray-900 mb-3">APPROVAL HIERARCHY</h3>
+                  
+                  {/* Table View */}
+                  <div className="bg-white border border-gray-300">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="border border-gray-300 px-2 py-1 text-left font-semibold">Step</th>
+                          <th className="border border-gray-300 px-2 py-1 text-left font-semibold">Recipient</th>
+                                                     <th className="border border-gray-300 px-2 py-1 text-center font-semibold">✓ ACCEPTED</th>
+                          <th className="border border-gray-300 px-2 py-1 text-center font-semibold">✗ REJECTED</th>
+                          <th className="border border-gray-300 px-2 py-1 text-left font-semibold">Comments</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {document.approvalSteps.map((step, index) => (
+                          <tr key={step.approverEmail}>
+                            <td className="border border-gray-300 px-2 py-2 text-center font-medium">
+                              {index + 1}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2">
+                              {step.approverEmail}
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2 text-center">
+                              <div className="w-5 h-5 border-2 border-green-600 mx-auto"></div>
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2 text-center">
+                              <div className="w-5 h-5 border-2 border-red-600 mx-auto"></div>
+                            </td>
+                            <td className="border border-gray-300 px-2 py-2">
+                              <div className="border-b border-dotted border-gray-400 min-h-4 w-full"></div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="space-y-2">
-                    {document.approvalSteps.map((step, index) => (
-                      <div key={step.approverEmail} className="flex items-center">
-                        <Badge variant="outline" className="mr-2 border-blue-300 text-blue-800">
-                          Step {index + 1}
-                        </Badge>
-                        <span className="text-gray-900">{step.approverEmail}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-blue-200">
-                    <p className="text-sm text-blue-800">
-                      <strong>Mode:</strong> Approvers can review in any order
+                  
+                  <div className="mt-2">
+                    <p className="text-xs text-blue-800">
+                      <strong>Instructions:</strong> Each recipient should tick either ACCEPTED (✓) or REJECTED (✗) and add comments if needed.
                     </p>
                   </div>
                 </div>
@@ -301,7 +326,7 @@ export default function CoverSheetPage() {
             size="lg"
           >
             <CheckCircle className="h-4 w-4 mr-2" />
-            Mark as Ready for Pickup
+            Submit
           </Button>
         </div>
       </main>

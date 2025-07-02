@@ -110,12 +110,12 @@ export default function WorkflowGuidePage() {
               <div className="p-4 border rounded-lg bg-orange-50">
                 <div className="flex items-center mb-2">
                   <CheckCircle className="h-5 w-5 text-orange-600 mr-2" />
-                  <span className="font-semibold">Approver/Signer</span>
+                  <span className="font-semibold">Recipient</span>
                 </div>
                 <p className="text-sm text-gray-600 mb-2">manager@company.com</p>
                 <ul className="text-xs text-gray-600 space-y-1">
                   <li>• Receive documents</li>
-                  <li>• Approve/reject</li>
+                  <li>• Accept/reject</li>
                   <li>• Add comments</li>
                 </ul>
               </div>
@@ -164,7 +164,7 @@ export default function WorkflowGuidePage() {
                   <li>Click Scan QR Code and select a document to pickup</li>
                   <li>Logout and login as <strong>manager@company.com</strong></li>
                   <li>See documents pending your approval</li>
-                  <li>Use document detail page to approve/reject</li>
+                  <li>Use document detail page to accept/reject</li>
                 </ol>
               </div>
 
@@ -173,7 +173,7 @@ export default function WorkflowGuidePage() {
                 <ul className="text-sm space-y-2 list-disc list-inside">
                   <li><strong>Role-based visibility:</strong> Each user sees different documents</li>
                   <li><strong>QR Code scanning:</strong> Status updates via QR scanning</li>
-                  <li><strong>Approval hierarchy:</strong> Sequential approver workflow</li>
+                  <li><strong>Approval hierarchy:</strong> Sequential recipient workflow</li>
                   <li><strong>Action history:</strong> Complete audit trail</li>
                   <li><strong>Status tracking:</strong> Real-time status updates</li>
                   <li><strong>Cover sheets:</strong> Printable QR code labels</li>

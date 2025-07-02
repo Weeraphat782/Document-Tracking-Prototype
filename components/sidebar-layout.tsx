@@ -69,7 +69,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
     switch (role) {
       case 'admin': return 'Department Admin'
       case 'mail': return 'Mail Controller'
-      case 'approver': return 'Approver/Signer'
+      case 'approver': return 'Recipient'
       case 'recipient': return 'Recipient'
       default: return role
     }

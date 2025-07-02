@@ -244,8 +244,8 @@ function CreateDocumentContent() {
     if (template && template.defaultApprovers && template.defaultApprovers.length > 0) {
       setApprovers([...template.defaultApprovers])
       toast({
-        title: "Approvers Loaded",
-        description: `Loaded ${template.defaultApprovers.length} default approvers from template "${template.name}"`,
+        title: "Recipients Loaded",
+        description: `Loaded ${template.defaultApprovers.length} default recipients from template "${template.name}"`,
       })
       console.log("✅ Default approvers loaded:", template.defaultApprovers)
     } else {
@@ -290,7 +290,7 @@ function CreateDocumentContent() {
     if (validApprovers.length === 0) {
       toast({
         title: "Validation Error",
-        description: "At least one approver is required",
+        description: "At least one recipient is required",
         variant: "destructive",
       })
       return false
@@ -370,7 +370,7 @@ function CreateDocumentContent() {
         description: isEdit 
           ? `Document ${document.id} has been updated successfully`
           : isRevision 
-          ? `Revised document ${document.id} created. ${resetAllApprovals ? 'All approvers must approve again.' : 'Previous approvals preserved where applicable.'}`
+          ? `Revised document ${document.id} created. ${resetAllApprovals ? 'All recipients must approve again.' : 'Previous approvals preserved where applicable.'}`
           : `Document ${document.id} has been created and is ready for pickup`,
       })
     } catch (error) {

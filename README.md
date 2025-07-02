@@ -34,9 +34,9 @@ A comprehensive document tracking and workflow management system built with **Ne
 - Track documents in transit
 - Manage physical document movement
 
-### 3. **Approver/Signer** (`approver`)
+### 3. **Recipient** (`approver`)
 - Receive documents for review
-- Approve or reject documents
+- Accept or reject documents
 - Add comments and feedback
 - Process multi-level approvals
 
@@ -143,14 +143,14 @@ The system includes pre-configured demo users for testing:
 
 - **Admin**: `admin@company.com`
 - **Mail Controller**: `mail@company.com`  
-- **Approver**: `manager@company.com`
+- **Recipient**: `manager@company.com`
 - **Recipient**: `recipient@company.com`
 
 ### Testing Workflow
 
 1. **Login as Admin** → Create documents
 2. **Switch to Mail Controller** → Pickup and deliver documents
-3. **Switch to Approver** → Review and approve/reject
+3. **Switch to Recipient** → Review and accept/reject
 4. **Switch to Recipient** → Confirm receipt
 5. **Return to Admin** → Close completed workflows
 
