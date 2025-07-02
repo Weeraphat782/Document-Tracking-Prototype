@@ -94,7 +94,7 @@ export interface CreateTemplateRequest {
   isPublic?: boolean
 }
 
-// Approval hierarchy
+  // Recipient list
 export interface ApprovalStep {
   order: number
   approverEmail: string

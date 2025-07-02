@@ -190,7 +190,7 @@ export default function ScanResult() {
           <Card className="mt-8">
             <CardHeader>
               <CardTitle>Workflow Progress</CardTitle>
-              <CardDescription>Document approval hierarchy</CardDescription>
+              <CardDescription>Document recipient list</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">

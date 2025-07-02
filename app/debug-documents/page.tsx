@@ -181,7 +181,7 @@ export default function DebugDocuments() {
                         <div><strong>Title:</strong> {searchResult.title}</div>
                         <div><strong>Status:</strong> <Badge>{searchResult.status}</Badge></div>
                         <div><strong>Created By:</strong> {searchResult.createdBy}</div>
-                        <div><strong>Workflow:</strong> {searchResult.workflow}</div>
+
                       </div>
                     ) : (
                       <div className="text-gray-600">Document not found</div>

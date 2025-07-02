@@ -305,6 +305,7 @@ export class CoverSheetGenerator {
         </head>
         <body>
           <div class="cover-sheet">
+            <!-- Updated: No To field as of ${new Date().toISOString()} -->
             <div class="header">
               <h1>DISTRIBUTION LIST</h1>
               <h2>${documentId}</h2>
@@ -319,18 +320,12 @@ export class CoverSheetGenerator {
                 <span class="label">Document Type:</span>
                 <span class="value">${type}</span>
               </div>
-              <div class="info-row">
-                <span class="label">Workflow:</span>
-                <span class="value">${workflow.toUpperCase()}</span>
-              </div>
+
               <div class="info-row">
                 <span class="label">From:</span>
                 <span class="value">${from}</span>
               </div>
-              <div class="info-row">
-                <span class="label">To:</span>
-                <span class="value">${to}</span>
-              </div>
+
               <div class="info-row">
                 <span class="label">Created:</span>
                 <span class="value">${currentDate}</span>
@@ -350,7 +345,7 @@ export class CoverSheetGenerator {
 
             ${approvalHierarchy && approvalHierarchy.length > 0 ? `
               <div class="approval-hierarchy">
-                <h3>APPROVAL HIERARCHY</h3>
+                <h3>RECIPIENT LIST</h3>
                 
                 <table class="approval-table">
                   <thead>
@@ -412,7 +407,9 @@ export class CoverSheetGenerator {
       documentId, title, type, workflow, from, to, qrCodeURL, approvalHierarchy, approvalMode
     )
     
-    const printWindow = window.open('', '_blank')
+    // Force cache clear with timestamp
+    const timestamp = new Date().getTime()
+    const printWindow = window.open('', '_blank', `width=800,height=600,scrollbars=yes,cache=${timestamp}`)
     if (printWindow) {
       printWindow.document.write(html)
       printWindow.document.close()

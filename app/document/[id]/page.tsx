@@ -312,16 +312,7 @@ export default function DocumentDetailPage() {
                         <Badge variant="outline" className="text-xs font-mono">{document.id}</Badge>
                         <Badge variant="outline" className="text-xs">{document.type}</Badge>
                       </div>
-                      <div className="flex items-center space-x-1 text-xs sm:text-sm">
-                        {document.workflow === "flow" ? (
-                          <Users className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                        ) : (
-                          <User className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
-                        )}
-                        <span className="truncate">
-                          {document.workflow === "flow" ? "Multi-level Approval" : "Direct Delivery"}
-                        </span>
-                      </div>
+
                     </CardDescription>
                   </div>
                   <div className="flex-shrink-0">
@@ -379,13 +370,13 @@ export default function DocumentDetailPage() {
               </CardContent>
             </Card>
 
-            {/* Approval Hierarchy (for Flow workflow) */}
+            {/* Recipient List (for Flow workflow) */}
             {document.workflow === "flow" && document.approvalSteps && (
               <Card>
                 <CardHeader className="pb-3 sm:pb-6">
                   <CardTitle className="flex items-center text-base sm:text-lg">
                     <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-                    Approval Hierarchy
+                    Recipient List
                   </CardTitle>
                   <CardDescription className="text-sm">
                     Document approval progress and hierarchy - recipients can review in any order

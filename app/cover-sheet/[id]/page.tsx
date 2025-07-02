@@ -208,12 +208,7 @@ export default function CoverSheetPage() {
                     <span className="font-semibold text-gray-800">Document Type:</span>
                     <span className="flex-1 text-right text-gray-900">{document.type}</span>
                   </div>
-                  <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
-                    <span className="font-semibold text-gray-800">Workflow:</span>
-                    <span className="flex-1 text-right uppercase font-medium text-gray-900">
-                      {document.workflow}
-                    </span>
-                  </div>
+
                 </div>
 
                 {/* Routing Information */}
@@ -222,14 +217,7 @@ export default function CoverSheetPage() {
                     <span className="font-semibold text-gray-800">From:</span>
                     <span className="flex-1 text-right text-gray-900">{document.createdBy}</span>
                   </div>
-                  <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
-                    <span className="font-semibold text-gray-800">To:</span>
-                    <span className="flex-1 text-right text-gray-900">
-                      {document.workflow === "flow" && document.approvalSteps 
-                        ? document.approvalSteps[0].approverEmail 
-                        : document.recipient}
-                    </span>
-                  </div>
+
                   <div className="flex justify-between border-b border-dotted border-gray-400 pb-1">
                     <span className="font-semibold text-gray-800">Created:</span>
                     <span className="flex-1 text-right text-gray-900">
@@ -260,7 +248,7 @@ export default function CoverSheetPage() {
               {/* Approval Hierarchy */}
               {document.workflow === "flow" && document.approvalSteps && (
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-3 border border-blue-200">
-                  <h3 className="font-semibold text-gray-900 mb-3">APPROVAL HIERARCHY</h3>
+                  <h3 className="font-semibold text-gray-900 mb-3">RECIPIENT LIST</h3>
                   
                   {/* Table View */}
                   <div className="bg-white border border-gray-300">

@@ -173,7 +173,7 @@ export default function WorkflowGuidePage() {
                 <ul className="text-sm space-y-2 list-disc list-inside">
                   <li><strong>Role-based visibility:</strong> Each user sees different documents</li>
                   <li><strong>QR Code scanning:</strong> Status updates via QR scanning</li>
-                  <li><strong>Approval hierarchy:</strong> Sequential recipient workflow</li>
+                  <li><strong>Recipient list:</strong> Sequential recipient workflow</li>
                   <li><strong>Action history:</strong> Complete audit trail</li>
                   <li><strong>Status tracking:</strong> Real-time status updates</li>
                   <li><strong>Cover sheets:</strong> Printable QR code labels</li>

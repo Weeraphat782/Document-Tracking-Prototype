@@ -449,12 +449,7 @@ export default function ScanQR() {
                         {scannedDocument.status}
                       </Badge>
                     </div>
-                    <div>
-                      <p className="font-medium text-green-800">Workflow Type</p>
-                      <p className="text-sm text-green-700">
-                        {scannedDocument.workflow === 'flow' ? 'Flow (Multi-level approval)' : 'Drop (Direct delivery)'}
-                      </p>
-                    </div>
+
                     <div>
                       <p className="font-medium text-green-800">Created By</p>
                       <p className="text-sm text-green-700">{scannedDocument.createdBy}</p>
