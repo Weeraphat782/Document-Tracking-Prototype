@@ -15,26 +15,20 @@ export type WorkflowType = "flow" | "drop"
 // NEW: Dual Status System
 // Document Status - represents the approval/business state of the document
 export type DocumentStatusNew = 
-  | "NEW"             // Document just created, awaiting delivery method selection
-  | "ACTIVE"          // Document is in active workflow (includes draft, approved steps)
+  | null              // No approval action yet (shown as "–")
+  | "PENDING"         // Waiting for approval decision
+  | "ACCEPTED"        // Document has been accepted/approved
   | "REJECTED"        // Document has been rejected
-  | "COMPLETED"       // Document workflow is complete
-  | "CANCELLED"       // Document has been cancelled
 
-// Tracking Status - represents the physical/logistical state
+// Tracking Status - represents the physical/logistical state  
 export type TrackingStatus = 
-  | "PENDING_PICKUP"      // Waiting to be picked up
-  | "IN_TRANSIT"          // Being transported
-  | "IN_TRANSIT_REJECTED" // Being transported back (rejected)
-  | "DELIVERED"           // Has been delivered
-  | "RECEIVED"            // Has been received/confirmed
-  | "AWAITING_APPROVAL"   // Waiting for approval action
-  | "READY_FOR_NEXT_STEP" // Ready to move to next approval step
-  | "HAND_TO_HAND_PENDING" // Hand-to-hand delivery pending confirmation
-  | "FINAL_APPROVAL_PENDING" // Final approver hand-to-hand pending admin closure
-  | "REJECTED_RETURNED"   // Rejected document returned to originator
-  | "CANCELLED_ROUTE"     // Document workflow cancelled
-  | "COMPLETED_ROUTE"     // Document workflow completed
+  | "NEW"                 // Document just created, can edit details
+  | "READY_FOR_PICKUP"    // Released for pickup, no more editing
+  | "PICKED_UP"           // Document has been picked up
+  | "DELIVERED"           // Document has been delivered
+  | "RECEIVED"            // Document has been received by recipient
+  | "COMPLETED"           // All approvers accepted (workflow complete)
+  | "REJECTED"            // Document was rejected (workflow terminated)
 
 // Legacy Document status types (for backward compatibility)
 export type DocumentStatus = 
@@ -82,6 +76,7 @@ export interface DocumentTemplate {
   description?: string
   category: string
   templateFields: TemplateField[]
+  defaultApprovers: string[]  // ชื่อคนที่ต้องเซ็นเอกสารกำหนดไว้ล่วงหน้า
   createdBy: string
   createdAt: string
   updatedAt: string
@@ -95,6 +90,7 @@ export interface CreateTemplateRequest {
   description?: string
   category: string
   templateFields: TemplateField[]
+  defaultApprovers: string[]  // ชื่อคนที่ต้องเซ็นเอกสาร
   isPublic?: boolean
 }
 
@@ -232,6 +228,7 @@ export type ActionType =
   | "revise"
   | "cancel"
   | "create_revision"
+  | "clone_created"
 
 // File attachment interface
 export interface FileAttachment {
@@ -318,127 +315,122 @@ export interface StatusDisplay {
 // Status mapping from legacy to new dual status system
 export const LEGACY_TO_DUAL_STATUS_MAP: Record<DocumentStatus, StatusMapping> = {
   "NEW": {
-    documentStatus: "NEW",
-    trackingStatus: undefined as any
+    documentStatus: null,  // No approval action yet (–)
+    trackingStatus: "NEW"
   },
   "Ready for Pick-up (Drop Off)": {
-    documentStatus: "ACTIVE",
-    trackingStatus: "PENDING_PICKUP"
+    documentStatus: null,  // No approval action yet (–)
+    trackingStatus: "READY_FOR_PICKUP"
   },
   "In Transit (Mail Controller)": {
-    documentStatus: "ACTIVE",
-    trackingStatus: "IN_TRANSIT"
+    documentStatus: null,  // No approval action yet (–)
+    trackingStatus: "PICKED_UP"
   },
   "In Transit - Rejected Document": {
     documentStatus: "REJECTED",
-    trackingStatus: "IN_TRANSIT_REJECTED"
+    trackingStatus: "PICKED_UP"
   },
   "Delivered (Drop Off)": {
-    documentStatus: "ACTIVE",
+    documentStatus: null,  // No approval action yet (–)
     trackingStatus: "DELIVERED"
   },
   "Delivered (User)": {
-    documentStatus: "ACTIVE",
+    documentStatus: null,  // No approval action yet (–)  
     trackingStatus: "DELIVERED"
   },
   "Delivered (Hand to Hand)": {
-    documentStatus: "ACTIVE",
-    trackingStatus: "HAND_TO_HAND_PENDING"
+    documentStatus: null,  // No approval action yet (–)
+    trackingStatus: "DELIVERED"
   },
   "Final Approval - Hand to Hand": {
-    documentStatus: "ACTIVE",
-    trackingStatus: "FINAL_APPROVAL_PENDING"
+    documentStatus: null,  // No approval action yet (–)
+    trackingStatus: "COMPLETED"
   },
   "Final Approval - Delivered to Originator": {
-    documentStatus: "ACTIVE",
-    trackingStatus: "FINAL_APPROVAL_PENDING"
+    documentStatus: null,  // No approval action yet (–)
+    trackingStatus: "COMPLETED"
   },
   "Received (User)": {
-    documentStatus: "ACTIVE",
+    documentStatus: "PENDING",  // Waiting for approval decision
     trackingStatus: "RECEIVED"
   },
   "Approved by Approver. Pending pickup for next step": {
-    documentStatus: "ACTIVE",
-    trackingStatus: "PENDING_PICKUP"
+    documentStatus: "ACCEPTED",  // Approved by current approver
+    trackingStatus: "READY_FOR_PICKUP"
   },
   "Approval Complete. Pending return to Originator": {
-    documentStatus: "ACTIVE",
-    trackingStatus: "PENDING_PICKUP"
+    documentStatus: null,  // All approved, no current pending action (–)
+    trackingStatus: "READY_FOR_PICKUP"
   },
   "COMPLETED ROUTE": {
-    documentStatus: "COMPLETED",
-    trackingStatus: "COMPLETED_ROUTE"
+    documentStatus: null,  // Workflow complete (–)
+    trackingStatus: "COMPLETED"
   },
   "CANCELLED ROUTE": {
-    documentStatus: "CANCELLED",
-    trackingStatus: "CANCELLED_ROUTE"
+    documentStatus: null,  // Cancelled (–)
+    trackingStatus: "REJECTED"
   },
   "REJECTED ROUTE": {
     documentStatus: "REJECTED",
-    trackingStatus: "RECEIVED"
+    trackingStatus: "REJECTED"
   },
   "REJECTED - Ready for Pickup": {
     documentStatus: "REJECTED",
-    trackingStatus: "PENDING_PICKUP"
+    trackingStatus: "READY_FOR_PICKUP"
   },
   "REJECTED - Hand to Hand": {
     documentStatus: "REJECTED",
-    trackingStatus: "HAND_TO_HAND_PENDING"
+    trackingStatus: "READY_FOR_PICKUP"
   },
   "REJECTED - Returned to Originator": {
     documentStatus: "REJECTED",
-    trackingStatus: "REJECTED_RETURNED"
+    trackingStatus: "REJECTED"
   },
   "Closed": {
-    documentStatus: "COMPLETED",
-    trackingStatus: "RECEIVED"
+    documentStatus: null,  // Closed/Complete (–)
+    trackingStatus: "COMPLETED"
   }
 }
 
 // Display configurations for new status system
-export const DOCUMENT_STATUS_DISPLAY: Record<DocumentStatusNew, StatusDisplay> = {
-  "NEW": {
-    text: "New",
-    color: "bg-purple-500",
-    icon: "📄"
+export const DOCUMENT_STATUS_DISPLAY: Record<string, StatusDisplay> = {
+  "null": {
+    text: "–",
+    color: "bg-gray-400",
+    icon: "–"
   },
-  "ACTIVE": {
-    text: "Active",
-    color: "bg-blue-500",
-    icon: "🔄"
+  "PENDING": {
+    text: "Pending",
+    color: "bg-orange-500",
+    icon: "⏳"
+  },
+  "ACCEPTED": {
+    text: "Accepted",
+    color: "bg-green-500",
+    icon: "✅"
   },
   "REJECTED": {
     text: "Rejected",
     color: "bg-red-500",
     icon: "❌"
-  },
-  "COMPLETED": {
-    text: "Completed",
-    color: "bg-emerald-500",
-    icon: "🏁"
-  },
-  "CANCELLED": {
-    text: "Cancelled",
-    color: "bg-gray-600",
-    icon: "🚫"
   }
 }
 
 export const TRACKING_STATUS_DISPLAY: Record<TrackingStatus, StatusDisplay> = {
-  "PENDING_PICKUP": {
-    text: "Pending Pickup",
+  "NEW": {
+    text: "NEW",
+    color: "bg-purple-500",
+    icon: "📄"
+  },
+  "READY_FOR_PICKUP": {
+    text: "Ready for Pick-up",
     color: "bg-yellow-500",
     icon: "📦"
   },
-  "IN_TRANSIT": {
-    text: "In Transit",
+  "PICKED_UP": {
+    text: "Picked up",
     color: "bg-blue-500",
     icon: "🚚"
-  },
-  "IN_TRANSIT_REJECTED": {
-    text: "Returning to Originator",
-    color: "bg-red-500",
-    icon: "↩️"
   },
   "DELIVERED": {
     text: "Delivered",
@@ -450,40 +442,15 @@ export const TRACKING_STATUS_DISPLAY: Record<TrackingStatus, StatusDisplay> = {
     color: "bg-emerald-500",
     icon: "✅"
   },
-  "AWAITING_APPROVAL": {
-    text: "Awaiting Approval",
-    color: "bg-orange-500",
-    icon: "⏳"
-  },
-  "READY_FOR_NEXT_STEP": {
-    text: "Ready for Next Step",
-    color: "bg-indigo-500",
-    icon: "➡️"
-  },
-  "HAND_TO_HAND_PENDING": {
-    text: "Hand-to-Hand Pending",
-    color: "bg-purple-500",
-    icon: "🤝"
-  },
-  "FINAL_APPROVAL_PENDING": {
-    text: "Final Approval Pending",
-    color: "bg-teal-500",
-    icon: "🏆"
-  },
-  "REJECTED_RETURNED": {
-    text: "Rejected - Returned to Originator",
-    color: "bg-red-600",
-    icon: "🔙"
-  },
-  "CANCELLED_ROUTE": {
-    text: "Cancelled Route",
-    color: "bg-gray-600",
-    icon: "🚫"
-  },
-  "COMPLETED_ROUTE": {
-    text: "Completed Route",
+  "COMPLETED": {
+    text: "Completed",
     color: "bg-emerald-600",
     icon: "🏁"
+  },
+  "REJECTED": {
+    text: "Rejected",
+    color: "bg-red-600",
+    icon: "❌"
   }
 }
 
@@ -496,16 +463,16 @@ export const convertLegacyToDualStatus = (legacyStatus: DocumentStatus): StatusM
 }
 
 export const getDualStatusFromDocument = (document: Document): StatusMapping => {
-  // Special handling for NEW status - always show as NEW with no tracking status
-  if (document.status === "NEW" || document.documentStatus === "NEW") {
+  // Special handling for NEW tracking status 
+  if (document.status === "NEW" || document.trackingStatus === "NEW") {
     return {
-      documentStatus: "NEW",           // Show as "New"
-      trackingStatus: undefined as any // Will show as blank
+      documentStatus: null,      // No approval action yet (–)
+      trackingStatus: "NEW"      // Show as "NEW"
     }
   }
   
   // If dual status is already set, use it
-  if (document.documentStatus && document.trackingStatus) {
+  if (document.documentStatus !== undefined && document.trackingStatus) {
     return {
       documentStatus: document.documentStatus,
       trackingStatus: document.trackingStatus

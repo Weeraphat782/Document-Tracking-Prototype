@@ -182,9 +182,8 @@ export class DatabaseService {
       comments: "Document created - awaiting delivery method selection"
     }
 
-    // Set initial dual status - NEW status should have no tracking status yet
+    // Set initial dual status - NEW documents allow editing
     const initialStatus: DocumentStatus = "NEW"
-    // Don't set dual status yet - admin needs to choose delivery method first
 
     const document: Document = {
       id: docId,
@@ -193,15 +192,15 @@ export class DatabaseService {
       description,
       workflow,
       status: initialStatus,
-      documentStatus: "NEW" as DocumentStatusNew,      // Set to NEW for proper display
-      trackingStatus: undefined,  // Will be set when admin chooses delivery method
+      documentStatus: null,        // No approval action yet (–)
+      trackingStatus: "NEW",       // Document just created, can edit details
       createdAt: now,
       createdBy,
       createdByDropOffLocation,
       approvalSteps,
       currentStepIndex: 0,
       recipient: workflow === "drop" ? recipient : undefined,
-      approvalMode: workflow === "flow" ? (approvalMode || "sequential") : undefined,
+      approvalMode: workflow === "flow" ? "flexible" : undefined,
       qrData,
       actionHistory: [initialAction]
     }
@@ -546,8 +545,7 @@ export class DatabaseService {
             // Check if user is the current step approver
             const isCurrentStep = doc.approvalSteps[doc.currentStepIndex || 0]?.approverEmail === user.email
             
-            // Check approval mode (default to sequential if not set)
-            const approvalMode = doc.approvalMode || "sequential"
+            // Approval mode is now always flexible
             
             // Show documents that are:
             // 1. Pending for this approver
@@ -568,13 +566,8 @@ export class DatabaseService {
               "With Approver for Review"
             ].includes(doc.status)
             
-            if (approvalMode === "flexible") {
-              // Flexible mode: any pending approver can see delivered documents
-              return userStep.status === "pending" && (isDelivered || isHandToHandRecipient || isReceivedByUser)
-            } else {
-              // Sequential mode: only current step approver can see
-              return isCurrentStep && userStep.status === "pending" && (isDelivered || isHandToHandRecipient || isReceivedByUser)
-            }
+            // Flexible mode: any pending approver can see delivered documents
+            return userStep.status === "pending" && (isDelivered || isHandToHandRecipient || isReceivedByUser)
           }
           return false
         })
@@ -616,6 +609,7 @@ export class DatabaseService {
           description: row.description || undefined,
           category: row.category,
           templateFields: (row.template_fields as any) || [],
+          defaultApprovers: (row.default_approvers as string[]) || [],
           createdBy: row.created_by,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
@@ -643,6 +637,7 @@ export class DatabaseService {
       description: request.description,
       category: request.category,
       templateFields: request.templateFields,
+      defaultApprovers: request.defaultApprovers,
       createdBy,
       createdAt: now,
       updatedAt: now,
@@ -663,6 +658,7 @@ export class DatabaseService {
             description: template.description,
             category: template.category,
             template_fields: template.templateFields as any,
+            default_approvers: template.defaultApprovers,
             created_by: template.createdBy,
             is_public: template.isPublic,
             is_active: template.isActive,
@@ -698,6 +694,7 @@ export class DatabaseService {
             description: template.description,
             category: template.category,
             template_fields: template.templateFields as any,
+            default_approvers: template.defaultApprovers,
             is_public: template.isPublic,
             is_active: template.isActive,
             usage_count: template.usageCount,
@@ -776,6 +773,7 @@ export class DatabaseService {
           { name: "requestedBy", type: "text", label: "Requested By", required: true, defaultValue: "" },
           { name: "dueDate", type: "date", label: "Due Date", required: false, defaultValue: "" }
         ],
+        defaultApprovers: ["manager@company.com", "finance@company.com"],  // ใครต้องเซ็น
         createdBy: "admin@company.com",
         createdAt: now,
         updatedAt: now,
@@ -795,6 +793,7 @@ export class DatabaseService {
           { name: "documentType", type: "select", label: "Document Type", required: true, options: ["Leave Request", "Performance Review", "Contract Amendment"], defaultValue: "Leave Request" },
           { name: "effectiveDate", type: "date", label: "Effective Date", required: true, defaultValue: "" }
         ],
+        defaultApprovers: ["manager@company.com", "hr@company.com"],  // ใครต้องเซ็น
         createdBy: "admin@company.com",
         createdAt: now,
         updatedAt: now,
@@ -814,6 +813,7 @@ export class DatabaseService {
           { name: "jurisdiction", type: "text", label: "Jurisdiction", required: true, defaultValue: "" },
           { name: "expirationDate", type: "date", label: "Expiration Date", required: false, defaultValue: "" }
         ],
+        defaultApprovers: ["legal@company.com", "ceo@company.com"],  // ใครต้องเซ็น
         createdBy: "admin@company.com",
         createdAt: now,
         updatedAt: now,

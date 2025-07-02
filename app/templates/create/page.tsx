@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
 import SidebarLayout from "@/components/sidebar-layout"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
-import { TemplateField, CreateTemplateRequest } from "@/lib/types"
-import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react"
+import { CreateTemplateRequest } from "@/lib/types"
+import { ArrowLeft, Save, X } from "lucide-react"
 
 export default function CreateTemplate() {
   const router = useRouter()
@@ -22,33 +23,26 @@ export default function CreateTemplate() {
   const [templateName, setTemplateName] = useState("")
   const [templateDescription, setTemplateDescription] = useState("")
   const [templateCategory, setTemplateCategory] = useState("")
-  const [fields, setFields] = useState<TemplateField[]>([])
+  const [defaultApprovers, setDefaultApprovers] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
   const categories = [
     'General', 'HR', 'Finance', 'Legal', 'Operations', 'IT', 'Procurement', 'Other'
   ]
 
-  const addField = () => {
-    const newField: TemplateField = {
-      name: `field_${fields.length + 1}`,
-      type: 'text',
-      label: '',
-      required: false,
-      placeholder: ''
-    }
-    setFields([...fields, newField])
+  const addNewApproverField = () => {
+    setDefaultApprovers([...defaultApprovers, ""])
   }
 
-  const updateField = (index: number, updates: Partial<TemplateField>) => {
-    const updatedFields = fields.map((field, i) => 
-      i === index ? { ...field, ...updates } : field
-    )
-    setFields(updatedFields)
+  const updateApprover = (index: number, value: string) => {
+    const newApprovers = [...defaultApprovers]
+    newApprovers[index] = value
+    setDefaultApprovers(newApprovers)
   }
 
-  const removeField = (index: number) => {
-    setFields(fields.filter((_, i) => i !== index))
+  const removeApprover = (index: number) => {
+    const newApprovers = defaultApprovers.filter((_, i) => i !== index)
+    setDefaultApprovers(newApprovers)
   }
 
   const handleSave = async () => {
@@ -70,25 +64,21 @@ export default function CreateTemplate() {
       return
     }
 
-    if (fields.length === 0) {
-      toast({
-        title: "Error",
-        description: "At least one field is required",
-        variant: "destructive"
-      })
-      return
-    }
-
     setIsLoading(true)
     try {
       const request: CreateTemplateRequest = {
         name: templateName,
         description: templateDescription,
         category: templateCategory,
-        templateFields: fields,
+        templateFields: [],
+        defaultApprovers: defaultApprovers,
         isPublic: true
       }
 
+      // Filter out empty approvers before saving
+      const validApprovers = defaultApprovers.filter(email => email.trim() !== "")
+      request.defaultApprovers = validApprovers
+      
       await EnhancedDocumentService.createTemplate(request, "admin@company.com")
 
       toast({
@@ -132,21 +122,18 @@ export default function CreateTemplate() {
               </Button>
             </Link>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Create New Template</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Create Distribution List Template</h1>
               <p className="text-sm sm:text-base text-gray-600">Design a reusable document template</p>
             </div>
           </div>
-          <Button onClick={handleSave} disabled={isLoading} className="w-full sm:w-auto">
-            <Save className="h-4 w-4 mr-2" />
-            {isLoading ? 'Creating...' : 'Create Template'}
-          </Button>
+          {/* Create List button moved to bottom right */}
         </div>
 
         <div className="max-w-4xl mx-auto space-y-6">
-          {/* Basic Information */}
+          {/* Distribution List */}
           <Card>
             <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
+              <CardTitle>Distribution List</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -188,92 +175,86 @@ export default function CreateTemplate() {
             </CardContent>
           </Card>
 
-          {/* Template Fields */}
+          {/* Default Approvers */}
           <Card>
             <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <CardTitle>Template Fields ({fields.length})</CardTitle>
-                <Button onClick={addField} size="sm" className="w-full sm:w-auto">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Field
-                </Button>
-              </div>
+              <CardTitle>Default Approvers</CardTitle>
+              <p className="text-sm text-gray-600">Define default approvers for this template (will be loaded automatically when creating documents)</p>
             </CardHeader>
-            <CardContent>
-              {fields.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <p>No fields added yet</p>
-                  <p className="text-sm">Click "Add Field" to start building your template</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {fields.map((field, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
-                        <h4 className="font-medium">Field {index + 1}</h4>
+            <CardContent className="space-y-4">
+              <div className="space-y-4">
+                <Label>Default Approvers *</Label>
+
+                <div className="space-y-3">
+                  {defaultApprovers.length === 0 ? (
+                    <div className="flex items-center space-x-2">
+                      <Badge variant="outline">1</Badge>
+                      <Input
+                        placeholder="Enter approver email address"
+                        value=""
+                        onChange={(e) => setDefaultApprovers([e.target.value])}
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    defaultApprovers.map((email, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <Badge variant="outline">{index + 1}</Badge>
+                        <div className="flex-1 relative">
+                          <Input
+                            placeholder="Enter approver email address"
+                            value={email}
+                            onChange={(e) => updateApprover(index, e.target.value)}
+                          />
+                        </div>
                         <Button
-                          variant="outline"
+                          variant="ghost"
                           size="sm"
-                          onClick={() => removeField(index)}
-                          className="text-red-600 hover:text-red-700 w-full sm:w-auto"
+                          onClick={() => removeApprover(index)}
+                          disabled={defaultApprovers.length === 1}
                         >
-                          <Trash2 className="h-4 w-4 mr-2 sm:mr-0" />
-                          <span className="sm:hidden">Remove Field</span>
+                          <X className="h-4 w-4" />
                         </Button>
                       </div>
+                    ))
+                  )}
+                </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div>
-                          <Label>Field Name *</Label>
-                          <Input
-                            value={field.name}
-                            onChange={(e) => updateField(index, { name: e.target.value })}
-                            placeholder="field_name"
-                          />
-                        </div>
-                        <div>
-                          <Label>Display Label *</Label>
-                          <Input
-                            value={field.label}
-                            onChange={(e) => updateField(index, { label: e.target.value })}
-                            placeholder="e.g., Full Name"
-                          />
-                        </div>
-                        <div>
-                          <Label>Field Type</Label>
-                          <Select 
-                            value={field.type} 
-                            onValueChange={(value) => updateField(index, { type: value as any })}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="text">Text Input</SelectItem>
-                              <SelectItem value="textarea">Text Area</SelectItem>
-                              <SelectItem value="select">Dropdown</SelectItem>
-                              <SelectItem value="date">Date</SelectItem>
-                              <SelectItem value="number">Number</SelectItem>
-                              <SelectItem value="email">Email</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={addNewApproverField}
+                  className="w-full"
+                >
+                  Add New
+                </Button>
+              </div>
 
-                      <div className="mt-4">
-                        <Label>Placeholder Text</Label>
-                        <Input
-                          value={field.placeholder || ''}
-                          onChange={(e) => updateField(index, { placeholder: e.target.value })}
-                          placeholder="e.g., Enter your full name"
-                        />
-                      </div>
-                    </div>
-                  ))}
+              {defaultApprovers.filter(email => email.trim() !== "").length > 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-xs text-blue-600">
+                    💡 When someone selects this template, these approvers will be automatically loaded in the document creation process
+                  </p>
                 </div>
               )}
             </CardContent>
           </Card>
+
+          {/* Create List Button - Bottom Right */}
+          <div className="flex justify-end mt-6">
+            <Button onClick={handleSave} disabled={isLoading} className="w-full sm:w-auto">
+              <Save className="h-4 w-4 mr-2" />
+              {isLoading ? 'Creating...' : 'Create List'}
+            </Button>
+          </div>
+
         </div>
       </div>
     </SidebarLayout>

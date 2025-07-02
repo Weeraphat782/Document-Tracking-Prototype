@@ -51,7 +51,7 @@ export default function SidebarLayout({ children }: SidebarLayoutProps) {
   const menuItems = [
     {
       id: 'dashboard',
-      label: 'Document Distribution System',
+              label: 'Document Registration',
       icon: <Home className="h-4 w-4" />,
       href: '/dashboard',
       roles: ['admin', 'mail', 'approver', 'recipient']

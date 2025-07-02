@@ -333,27 +333,20 @@ export class CoverSheetGenerator {
               <div class="approval-hierarchy">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                   <h3>APPROVAL HIERARCHY</h3>
-                  ${approvalMode ? `
-                    <span style="background: ${approvalMode === 'sequential' ? '#fef3c7' : '#dcfce7'}; 
-                                 color: ${approvalMode === 'sequential' ? '#92400e' : '#166534'}; 
-                                 padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
-                      ${approvalMode === 'sequential' ? 'Sequential (เรียงกัน)' : 'Flexible (ข้ามได้)'}
-                    </span>
-                  ` : ''}
+                  <span style="background: #dcfce7; 
+                               color: #166534; 
+                               padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;">
+                    Flexible (ข้ามได้)
+                  </span>
                 </div>
                 ${approvalHierarchy.map((approver, index) => `
                   <div class="approval-step">
                     <strong>Step ${index + 1}:</strong> ${approver}
                   </div>
                 `).join('')}
-                ${approvalMode ? `
-                  <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #bfdbfe; font-size: 12px; color: #1e40af;">
-                    <strong>Mode:</strong> ${approvalMode === 'sequential' 
-                      ? 'Approvers must review in order' 
-                      : 'Approvers can review in any order'
-                    }
-                  </div>
-                ` : ''}
+                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #bfdbfe; font-size: 12px; color: #1e40af;">
+                  <strong>Mode:</strong> Approvers can review in any order
+                </div>
               </div>
             ` : ''}
 

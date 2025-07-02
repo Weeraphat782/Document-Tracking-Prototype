@@ -386,25 +386,9 @@ export default function DocumentDetailPage() {
                   <CardTitle className="flex items-center text-base sm:text-lg">
                     <Users className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                     Approval Hierarchy
-                    {document.approvalMode && (
-                      <Badge 
-                        variant="outline" 
-                        className={`ml-2 text-xs ${
-                          document.approvalMode === "sequential" 
-                            ? "bg-blue-50 text-blue-700 border-blue-200" 
-                            : "bg-green-50 text-green-700 border-green-200"
-                        }`}
-                      >
-                        {document.approvalMode === "sequential" ? "Sequential" : "Flexible"}
-                      </Badge>
-                    )}
                   </CardTitle>
                   <CardDescription className="text-sm">
-                    {document.approvalMode === "sequential" 
-                      ? "Approvers must review in order" 
-                      : document.approvalMode === "flexible"
-                      ? "Approvers can review in any order"
-                      : "Document approval progress and hierarchy"}
+                    Document approval progress and hierarchy - approvers can review in any order
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-3 sm:pt-6">
@@ -540,12 +524,9 @@ export default function DocumentDetailPage() {
                             }`}>
                               {step.dropOffLocation || "Location not set"}
                             </p>
-                            {((document.approvalMode === "sequential" && index === document.currentStepIndex) ||
-                              (document.approvalMode === "flexible" && step.status === "pending")) && (
+                            {step.status === "pending" && (
                               <p className="text-xs text-blue-600 mt-1 font-medium">
-                                {document.approvalMode === "flexible" 
-                                  ? "📍 Available for review" 
-                                  : "🎯 Current delivery destination"}
+                                📍 Available for review
                               </p>
                             )}
                             {step.status === "approved" && (

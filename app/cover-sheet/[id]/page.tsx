@@ -91,7 +91,7 @@ export default function CoverSheetPage() {
         to,
         qrCodeURL,
         approvalHierarchy,
-        document.approvalMode
+        "flexible"
       )
 
       toast({
@@ -262,18 +262,6 @@ export default function CoverSheetPage() {
                 <div className="bg-blue-50 border-l-4 border-blue-500 p-4 border border-blue-200">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-gray-900">APPROVAL HIERARCHY</h3>
-                    {document.approvalMode && (
-                      <Badge 
-                        variant="outline"
-                        className={`${
-                          document.approvalMode === "sequential" 
-                            ? "bg-orange-50 text-orange-700 border-orange-200" 
-                            : "bg-green-50 text-green-700 border-green-200"
-                        }`}
-                      >
-                        {document.approvalMode === "sequential" ? "Sequential (เรียงกัน)" : "Flexible (ข้ามได้)"}
-                      </Badge>
-                    )}
                   </div>
                   <div className="space-y-2">
                     {document.approvalSteps.map((step, index) => (
@@ -285,16 +273,11 @@ export default function CoverSheetPage() {
                       </div>
                     ))}
                   </div>
-                  {document.approvalMode && (
-                    <div className="mt-3 pt-3 border-t border-blue-200">
-                      <p className="text-sm text-blue-800">
-                        <strong>Mode:</strong> {document.approvalMode === "sequential" 
-                          ? "Approvers must review in order" 
-                          : "Approvers can review in any order"
-                        }
-                      </p>
-                    </div>
-                  )}
+                  <div className="mt-3 pt-3 border-t border-blue-200">
+                    <p className="text-sm text-blue-800">
+                      <strong>Mode:</strong> Approvers can review in any order
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

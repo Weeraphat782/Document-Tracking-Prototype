@@ -266,22 +266,8 @@ export class EnhancedDocumentService {
           }
         }
 
-        // Check approval mode
-        if (document.approvalMode === "sequential") {
-          // Sequential mode: only current step approver can act
-          const currentStepIndex = document.currentStepIndex || 0
-          const currentStep = document.approvalSteps[currentStepIndex]
-          
-          if (currentStep?.approverEmail !== user.email) {
-            return {
-              allowed: false,
-              reason: `Document is currently with ${currentStep?.approverEmail}. Sequential approval required.`
-            }
-          }
-        } else if (document.approvalMode === "flexible") {
-          // Flexible mode: any pending approver can act
-          warnings.push("Flexible approval mode: You can approve out of order")
-        }
+        // Flexible mode: any pending approver can act (approval mode selection removed)
+        warnings.push("Flexible approval mode: You can approve out of order")
       }
 
       // For approvers, also allow receiving hand-to-hand delivered documents
@@ -327,6 +313,7 @@ export class EnhancedDocumentService {
   }
 
   // Execute the action and update document state
+  // Execute action with new dual status system
   private static executeAction(
     document: Document, 
     action: ActionType, 
@@ -337,39 +324,50 @@ export class EnhancedDocumentService {
     const now = new Date()
     const timestamp = now.toISOString()
     const previousStatus = document.status
-    let newStatus: DocumentStatus = document.status
+    const previousDocumentStatus = document.documentStatus
+    const previousTrackingStatus = document.trackingStatus
+    
+    // Set new dual status based on action
+    let newDocumentStatus = document.documentStatus
+    let newTrackingStatus = document.trackingStatus
+    let newLegacyStatus: DocumentStatus = document.status
 
     try {
       switch (action) {
         case "pickup":
-          // Check if this is a rejected document being picked up
-          if (document.status === "REJECTED - Ready for Pickup") {
-            newStatus = "In Transit - Rejected Document"
-          } else {
-            newStatus = "In Transit (Mail Controller)"
+          // Release document: NEW → READY_FOR_PICKUP
+          if (document.trackingStatus === "NEW") {
+            newDocumentStatus = null        // No approval action yet (–)
+            newTrackingStatus = "READY_FOR_PICKUP"  // Released for pickup, no more editing
+            newLegacyStatus = "Ready for Pick-up (Drop Off)"
+          }
+          // Pick up document: READY_FOR_PICKUP → PICKED_UP  
+          else if (document.trackingStatus === "READY_FOR_PICKUP") {
+            newDocumentStatus = document.documentStatus  // Keep current document status
+            newTrackingStatus = "PICKED_UP"              // Document has been picked up
+            newLegacyStatus = document.documentStatus === "REJECTED" ? 
+              "In Transit - Rejected Document" : "In Transit (Mail Controller)"
           }
           break
+
         case "deliver":
-          // Check if this is a rejected document being delivered back to creator
-          if (document.status === "In Transit - Rejected Document") {
-            newStatus = deliveryMethod === "hand_to_hand" ? "REJECTED - Hand to Hand" : "REJECTED - Returned to Originator"
-          } else {
-            // Check if this is final approval delivery (all approvers have approved)
-            const isFinalApproval = document.workflow === "flow" && document.approvalSteps && 
-              document.approvalSteps.every(step => step.status === "approved")
-            
-            if (isFinalApproval) {
-              // Final approval delivery - should show as pending admin closure
-              newStatus = deliveryMethod === "hand_to_hand" ? "Final Approval - Hand to Hand" : "Final Approval - Delivered to Originator"
-            } else {
-              // Regular delivery to approver or recipient
-              newStatus = deliveryMethod === "hand_to_hand" ? "Delivered (Hand to Hand)" : "Delivered (Drop Off)"
-            }
+          // PICKED_UP → DELIVERED
+          if (document.trackingStatus === "PICKED_UP") {
+            newDocumentStatus = document.documentStatus  // Keep current document status
+            newTrackingStatus = "DELIVERED"              // Document has been delivered
+            newLegacyStatus = "Delivered (Drop Off)"
           }
           break
+
         case "receive":
-          newStatus = "Received (User)"
+          // DELIVERED → RECEIVED (with PENDING approval status)
+          if (document.trackingStatus === "DELIVERED") {
+            newDocumentStatus = "PENDING"    // Waiting for approval decision
+            newTrackingStatus = "RECEIVED"   // Document has been received by recipient
+            newLegacyStatus = "Received (User)"
+          }
           break
+
         case "approve":
           if (document.workflow === "flow" && document.approvalSteps) {
             // Find the approver's step
@@ -383,35 +381,24 @@ export class EnhancedDocumentService {
               
               // Check if all approvals are complete
               const allApproved = document.approvalSteps.every(step => step.status === "approved")
-              const pendingSteps = document.approvalSteps.filter(step => step.status === "pending")
               
               if (allApproved) {
-                // All approvers have approved
-                newStatus = deliveryMethod === "hand_to_hand" ? "Final Approval - Hand to Hand" : "Approval Complete. Pending return to Originator"
-              } else if (document.approvalMode === "sequential") {
-                // Sequential mode: move to next pending step
-                const nextPendingIndex = document.approvalSteps.findIndex(step => step.status === "pending")
-                if (nextPendingIndex !== -1) {
-                  document.currentStepIndex = nextPendingIndex
-                }
-                if (deliveryMethod === "hand_to_hand") {
-                  newStatus = "Delivered (Hand to Hand)"
-                } else {
-                  newStatus = "Approved by Approver. Pending pickup for next step"
-                }
+                // All approvers accepted: RECEIVED → COMPLETED
+                newDocumentStatus = null           // Workflow complete (–)
+                newTrackingStatus = "COMPLETED"    // All approvers accepted
+                newLegacyStatus = "COMPLETED ROUTE"
               } else {
-                // Flexible mode: document can continue to any remaining approver
-                if (deliveryMethod === "hand_to_hand") {
-                  newStatus = pendingSteps.length > 0 ? "Delivered (Hand to Hand)" : "Final Approval - Hand to Hand"
-                } else {
-                  newStatus = pendingSteps.length > 0 
-                    ? "Approved by Approver. Pending pickup for next step"
-                    : "Approval Complete. Pending return to Originator"
-                }
+                // More approvers needed: RECEIVED → READY_FOR_PICKUP (with ACCEPTED status)
+                newDocumentStatus = "ACCEPTED"      // Document has been accepted/approved
+                newTrackingStatus = "READY_FOR_PICKUP"  // Ready for pickup to next approver
+                newLegacyStatus = "Approved by Approver. Pending pickup for next step"
+                
+                // In flexible mode, current step index follows the workflow naturally
               }
             }
           }
           break
+
         case "reject":
           if (document.workflow === "flow" && document.approvalSteps) {
             // Find the approver's step
@@ -424,14 +411,26 @@ export class EnhancedDocumentService {
               document.rejectionReason = comments
             }
           }
-          newStatus = deliveryMethod === "hand_to_hand" ? "REJECTED - Hand to Hand" : "REJECTED - Ready for Pickup"
+          // RECEIVED → READY_FOR_PICKUP (for mail controller to pickup rejected document)
+          newDocumentStatus = "REJECTED"              // Document has been rejected
+          newTrackingStatus = "READY_FOR_PICKUP"      // Ready for pickup by mail controller
+          newLegacyStatus = "REJECTED - Ready for Pickup"
           break
+
         case "close":
-          newStatus = "COMPLETED ROUTE"
+          // Admin closes completed workflow
+          newDocumentStatus = null               // Workflow complete (–)
+          newTrackingStatus = "COMPLETED"        // All approvers accepted (workflow complete)
+          newLegacyStatus = "COMPLETED ROUTE"
           break
+
         case "cancel":
-          newStatus = "CANCELLED ROUTE"
+          // Admin cancels workflow
+          newDocumentStatus = null               // Cancelled (–)
+          newTrackingStatus = "REJECTED"         // Document was rejected (workflow terminated) 
+          newLegacyStatus = "CANCELLED ROUTE"
           break
+
         default:
           return {
             success: false,
@@ -440,14 +439,11 @@ export class EnhancedDocumentService {
           }
       }
 
-      // Update document
-      document.status = newStatus
+      // Update document with new status
+      document.status = newLegacyStatus
+      document.documentStatus = newDocumentStatus
+      document.trackingStatus = newTrackingStatus
       document.updatedAt = timestamp
-
-      // Update dual status based on new legacy status
-      const dualStatus = convertLegacyToDualStatus(newStatus)
-      document.documentStatus = dualStatus.documentStatus
-      document.trackingStatus = dualStatus.trackingStatus
 
       // Add action to history
       const actionRecord: DocumentAction = {
@@ -457,14 +453,14 @@ export class EnhancedDocumentService {
         performedBy: user.email,
         performedAt: timestamp,
         previousStatus,
-        newStatus,
+        newStatus: newLegacyStatus,
         comments,
         deliveryMethod,
-        // Add dual status tracking
-        previousDocumentStatus: document.documentStatus,
-        newDocumentStatus: dualStatus.documentStatus,
-        previousTrackingStatus: document.trackingStatus,
-        newTrackingStatus: dualStatus.trackingStatus
+        // Dual status tracking
+        previousDocumentStatus,
+        newDocumentStatus,
+        previousTrackingStatus,
+        newTrackingStatus
       }
       document.actionHistory.push(actionRecord)
 
@@ -542,7 +538,7 @@ export class EnhancedDocumentService {
         "Request for new laptops and office chairs",
         ["manager@company.com", "finance@company.com"],
         undefined,
-        "sequential"
+        "flexible"
       )
 
       const doc2 = await this.createDocument(
@@ -671,24 +667,17 @@ export class EnhancedDocumentService {
         currentStepIndex = newApprovalSteps.length
         qrCurrentStep = "All Approved - Ready for Completion"
       } else {
-        // Check if we're in sequential mode and need to wait for mail pickup
-        if (originalDocument.approvalMode === "sequential") {
-          const approvedCount = newApprovalSteps.filter(step => step.status === "approved").length
-          if (approvedCount > 0) {
-            // There are approved steps, so mail needs to pickup for next step
-            documentStatus = "Approved by Approver. Pending pickup for next step"
-            currentStepIndex = firstPendingIndex
-            qrCurrentStep = "Approved - Ready for Pickup to Next Step"
-          } else {
-            // No approvals yet, ready for initial pickup
-            documentStatus = "Ready for Pick-up (Drop Off)"
-            currentStepIndex = 0
-            qrCurrentStep = "Ready for Pickup"
-          }
-        } else {
-          // Flexible mode - ready for pickup to any pending approver
-          documentStatus = "Ready for Pick-up (Drop Off)"
+        // Flexible mode - ready for pickup to any pending approver (approval selection removed)
+        const approvedCount = newApprovalSteps.filter(step => step.status === "approved").length
+        if (approvedCount > 0) {
+          // There are approved steps, so mail needs to pickup for next step
+          documentStatus = "Approved by Approver. Pending pickup for next step"
           currentStepIndex = firstPendingIndex
+          qrCurrentStep = "Approved - Ready for Pickup to Next Step"
+        } else {
+          // No approvals yet, ready for initial pickup
+          documentStatus = "Ready for Pick-up (Drop Off)"
+          currentStepIndex = 0
           qrCurrentStep = "Ready for Pickup"
         }
       }
@@ -730,11 +719,16 @@ export class EnhancedDocumentService {
         comments: `Document revised: ${revisionReason}. Preserved ${preservedApprovals.length} approvals.`
       }
 
+      // Update dual status based on new legacy status
+      const dualStatus = convertLegacyToDualStatus(documentStatus)
+
       // Create new document
       const newDocument: Document = {
         ...originalDocument,
         id: newDocumentId,
         status: documentStatus,
+        documentStatus: dualStatus.documentStatus,
+        trackingStatus: dualStatus.trackingStatus,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         approvalSteps: newApprovalSteps,
@@ -760,9 +754,14 @@ export class EnhancedDocumentService {
         comments: `Document revised as ${newDocumentId}`
       }
 
+      // Update dual status for original document
+      const originalDualStatus = convertLegacyToDualStatus("CANCELLED ROUTE")
+
       const updatedOriginal: Document = {
         ...originalDocument,
         status: "CANCELLED ROUTE",
+        documentStatus: originalDualStatus.documentStatus,
+        trackingStatus: originalDualStatus.trackingStatus,
         updatedAt: new Date().toISOString(),
         actionHistory: [...originalDocument.actionHistory, originalUpdateAction]
       }
@@ -798,10 +797,8 @@ export class EnhancedDocumentService {
         throw new Error("Original document not found")
       }
 
-      // Validate that document can be revised (use same logic as canCreateRevision)
-      if (!this.canCreateRevision(originalDocument)) {
-        throw new Error("Can only create revision from rejected documents")
-      }
+      // Allow cloning/editing for all documents (no restrictions)
+      console.log("Creating clone/edit for document:", originalDocument.id, "Status:", originalDocument.status)
 
       // Handle approval preservation based on resetAllApprovals flag
       const preservedApprovals: PreservedApproval[] = []
@@ -861,44 +858,23 @@ export class EnhancedDocumentService {
         }
       }
 
-      // Calculate document status based on approval states
-      const finalApprovalMode = newApprovalMode || originalDocument.approvalMode || "sequential"
+      // For cloned documents, always start as NEW status regardless of original status
+      // This allows the admin to review and modify everything before starting the workflow
+      // Approval mode is now always flexible
       
-      // Find first pending step for currentStepIndex
-      const firstPendingIndex = newApprovalSteps.findIndex(step => step.status === "pending")
-      const allApproved = firstPendingIndex === -1
-
-      // Determine document status and current step
-      let documentStatus: DocumentStatus
-      let currentStepIndex: number
-      let qrCurrentStep: string
-
-      if (allApproved) {
-        documentStatus = "Approval Complete. Pending return to Originator"
-        currentStepIndex = newApprovalSteps.length
-        qrCurrentStep = "All Approved - Ready for Completion"
-      } else {
-        // Check if we're in sequential mode and need to wait for mail pickup
-        if (finalApprovalMode === "sequential") {
-          const approvedCount = newApprovalSteps.filter(step => step.status === "approved").length
-          if (approvedCount > 0) {
-            // There are approved steps, so mail needs to pickup for next step
-            documentStatus = "Approved by Approver. Pending pickup for next step"
-            currentStepIndex = firstPendingIndex
-            qrCurrentStep = "Approved - Ready for Pickup to Next Step"
-          } else {
-            // No approvals yet, ready for initial pickup
-            documentStatus = "Ready for Pick-up (Drop Off)"
-            currentStepIndex = 0
-            qrCurrentStep = "Ready for Pickup"
-          }
-        } else {
-          // Flexible mode - ready for pickup to any pending approver
-          documentStatus = "Ready for Pick-up (Drop Off)"
-          currentStepIndex = firstPendingIndex
-          qrCurrentStep = "Ready for Pickup"
+      // Reset all approval steps to pending for new cloned document
+      newApprovalSteps.forEach(step => {
+        if (step.status !== "approved" || resetAllApprovals) {
+          step.status = "pending"
+          step.timestamp = undefined
+          step.comments = undefined
         }
-      }
+      })
+
+      // Always start cloned documents as NEW so admin can review/modify before sending
+      const documentStatus: DocumentStatus = "NEW"
+      const currentStepIndex = 0
+      const qrCurrentStep = "Document Created - Ready for Review"
 
       // Create revision data
       const revisionNumber = (originalDocument.revision?.revisionNumber || 1) + 1
@@ -926,16 +902,19 @@ export class EnhancedDocumentService {
         version: "1.0"
       }
 
-      // Create revision action
-      const revisionAction: DocumentAction = {
+      // Create clone action
+      const cloneAction: DocumentAction = {
         id: this.generateActionId(),
         documentId: newDocumentId,
         action: "create_revision",
         performedBy: revisedBy,
         performedAt: new Date().toISOString(),
         newStatus: documentStatus,
-        comments: `Document revised with edits: ${revisionReason}. ${resetAllApprovals ? 'All approvals reset - all approvers must approve again' : `Preserved ${preservedApprovals.length} approvals`}. Total approvers: ${finalApprovers.length}.`
+        comments: `Document cloned/copied from ${originalDocumentId}: ${revisionReason}. ${resetAllApprovals ? 'All approvals reset - all approvers must approve again' : `Preserved ${preservedApprovals.length} approvals`}. Total approvers: ${finalApprovers.length}.`
       }
+
+      // Update dual status based on new legacy status
+      const dualStatus = convertLegacyToDualStatus(documentStatus)
 
       // Create new document with edits
       const newDocument: Document = {
@@ -944,35 +923,37 @@ export class EnhancedDocumentService {
         title: newTitle || originalDocument.title,
         description: newDescription || originalDocument.description,
         status: documentStatus,
+        documentStatus: dualStatus.documentStatus,
+        trackingStatus: dualStatus.trackingStatus,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         approvalSteps: newApprovalSteps,
-        approvalMode: finalApprovalMode,
+        approvalMode: "flexible",
         currentStepIndex: currentStepIndex,
         rejectionReason: undefined,
         revision,
         qrData,
-        actionHistory: [revisionAction]
+        actionHistory: [cloneAction]
       }
 
       // Save new document directly to database
       await DatabaseService.saveRevisionDocument(newDocument)
 
-      // Update original document status to indicate it has been revised
+      // Don't modify the original document - let it continue its workflow
+      // Just add a note to the original document's action history for reference
       const originalUpdateAction: DocumentAction = {
         id: this.generateActionId(),
         documentId: originalDocumentId,
-        action: "revise",
+        action: "clone_created",
         performedBy: revisedBy,
         performedAt: new Date().toISOString(),
         previousStatus: originalDocument.status,
-        newStatus: "CANCELLED ROUTE",
-        comments: `Document revised with edits as ${newDocumentId}`
+        newStatus: originalDocument.status, // Keep same status
+        comments: `Document cloned/copied as ${newDocumentId} - original document continues unchanged`
       }
 
       const updatedOriginal: Document = {
         ...originalDocument,
-        status: "CANCELLED ROUTE",
         updatedAt: new Date().toISOString(),
         actionHistory: [...originalDocument.actionHistory, originalUpdateAction]
       }
@@ -1027,24 +1008,14 @@ export class EnhancedDocumentService {
     return revisionChain
   }
 
-  // Check if document can be revised
+  // Check if document can be revised - NOW ALLOWS ALL DOCUMENTS TO BE CLONED/EDITED
   static canCreateRevision(document: Document): boolean {
-    // Check if document has been rejected at some point
-    const hasBeenRejected = document.actionHistory.some(action => action.action === "reject")
+    // Allow revision for ALL documents (no restrictions)
+    // This enables Clone & Edit functionality for any document regardless of status
     
-    // Allow revision if:
-    // 1. Document has been rejected at some point, AND
-    // 2. Document is flow workflow, AND  
-    // 3. Document has approval steps, AND
-    // 4. Some approvers have already approved (so we can preserve approvals), AND
-    // 5. Document is not completed/cancelled/archived
-    const notFinalStatus = !["COMPLETED ROUTE", "CANCELLED ROUTE", "Closed"].includes(document.status)
-    
-    return hasBeenRejected && 
-           document.workflow === "flow" &&
-           !!document.approvalSteps &&
-           document.approvalSteps.some(step => step.status === "approved") &&
-           notFinalStatus
+    // Only prevent revision if document has been physically deleted
+    // (but we don't have a "deleted" status, so this always returns true)
+    return true
   }
 
   private static generateDocumentId(): string {

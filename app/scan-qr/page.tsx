@@ -734,24 +734,13 @@ export default function ScanQR() {
                           </div>
                         </div>
                       </SelectItem>
-                      <SelectItem value="hand_to_hand">
-                        <div className="flex items-center">
-                          <User className="h-4 w-4 mr-2 text-green-600" />
-                          <div>
-                            <div className="font-medium">Hand to Hand</div>
-                            <div className="text-xs text-gray-500">Deliver directly to next person (no Mail Controller needed)</div>
-                          </div>
-                        </div>
-                      </SelectItem>
+
                     </SelectContent>
                   </Select>
                   {deliveryMethod && (
                     <div className="bg-blue-50 border border-blue-200 p-3 rounded">
                       <p className="text-sm text-blue-800">
-                        {deliveryMethod === "drop_off" 
-                          ? "📦 Document will be placed at drop-off location for Mail Controller to pickup and deliver to next step."
-                          : "🤝 Document will be delivered directly to the next person. Mail Controller pickup is not required."
-                        }
+                        📦 Document will be placed at drop-off location for Mail Controller to pickup and deliver to next step.
                       </p>
                     </div>
                   )}

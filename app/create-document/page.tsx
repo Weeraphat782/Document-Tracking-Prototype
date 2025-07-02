@@ -14,7 +14,7 @@ import { X, Plus, ArrowLeft, FileText, Users, User, CheckCircle, AlertCircle, In
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { EnhancedDocumentService } from "@/lib/enhanced-document-service"
-import { User as UserType, WorkflowType, DocumentTemplate, ApprovalMode, Document } from "@/lib/types"
+import { User as UserType, WorkflowType, DocumentTemplate, Document } from "@/lib/types"
 import { useToast } from "@/hooks/use-toast"
 
 function CreateDocumentContent() {
@@ -27,9 +27,11 @@ function CreateDocumentContent() {
   const [recipient, setRecipient] = useState("")
   const [templates, setTemplates] = useState<DocumentTemplate[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [approvalMode, setApprovalMode] = useState<ApprovalMode>("sequential")
+  // Approval mode is now always flexible - removed UI selection
   const [originalDocument, setOriginalDocument] = useState<Document | null>(null)
   const [isRevision, setIsRevision] = useState(false)
+  const [isEdit, setIsEdit] = useState(false)
+  const [editDocument, setEditDocument] = useState<Document | null>(null)
   const [revisionReason, setRevisionReason] = useState("")
   const [currentStep, setCurrentStep] = useState(1)
   const [createdDocument, setCreatedDocument] = useState<any>(null)
@@ -45,6 +47,11 @@ function CreateDocumentContent() {
   const loadTemplates = async (userId: string) => {
     try {
       const templatesData = await EnhancedDocumentService.getDocumentTemplates(userId)
+      console.log("📋 Templates loaded:", templatesData.map(t => ({
+        id: t.id,
+        name: t.name,
+        defaultApprovers: t.defaultApprovers
+      })))
       setTemplates(templatesData)
     } catch (error) {
       console.error("Error loading templates:", error)
@@ -67,7 +74,7 @@ function CreateDocumentContent() {
         setTitle(doc.title)
         setSelectedTemplate(doc.type)
         setDescription(doc.description || "")
-        setApprovalMode(doc.approvalMode || "sequential")
+        // Approval mode is now always flexible
         
         // Set approvers from original document and categorize by status
         if (doc.approvalSteps) {
@@ -92,6 +99,39 @@ function CreateDocumentContent() {
       toast({
         title: "Error",
         description: "Failed to load original document for revision",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const loadEditDocument = async (documentId: string) => {
+    try {
+      const doc = await EnhancedDocumentService.getDocumentById(documentId)
+      if (doc) {
+        setEditDocument(doc)
+        setIsEdit(true)
+        
+        // Pre-fill form with document data for editing
+        setTitle(doc.title)
+        setSelectedTemplate(doc.type)
+        setDescription(doc.description || "")
+        
+        // Set approvers from document
+        if (doc.approvalSteps) {
+          const approverEmails = doc.approvalSteps.map(step => step.approverEmail)
+          setApprovers(approverEmails)
+        }
+        
+        // Set recipient for drop workflow
+        if (doc.workflow === "drop" && doc.recipient) {
+          setRecipient(doc.recipient)
+        }
+      }
+    } catch (error) {
+      console.error("Error loading document for edit:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load document for editing",
         variant: "destructive",
       })
     }
@@ -126,7 +166,29 @@ function CreateDocumentContent() {
     if (revisionOf) {
       loadOriginalDocument(revisionOf)
     }
+    
+    // Check if this is an edit
+    const editId = searchParams.get('editId')
+    if (editId) {
+      loadEditDocument(editId)
+    }
   }, [router, toast, searchParams])
+
+  // Auto-load default approvers when template is selected
+  useEffect(() => {
+    console.log("🔄 useEffect check auto-load:", { 
+      selectedTemplate, 
+      isRevision, 
+      isEdit,
+      templatesLength: templates.length,
+      shouldAutoLoad: selectedTemplate && !isRevision && !isEdit && templates.length > 0
+    })
+    
+    if (selectedTemplate && !isRevision && !isEdit && templates.length > 0) {
+      console.log("🚀 Auto-loading default approvers...")
+      loadDefaultApprovers()
+    }
+  }, [selectedTemplate, isRevision, isEdit, templates])
 
   const addApprover = () => {
     if (newApprover && !approvers.includes(newApprover)) {
@@ -171,9 +233,25 @@ function CreateDocumentContent() {
   }
 
   const loadDefaultApprovers = () => {
-    // Default approvers functionality removed as templates now use custom fields
-    // Users will need to manually add approvers based on template requirements
-    setApprovers([])
+    // Load default approvers from selected template
+    const template = getSelectedTemplate()
+    console.log("🔍 Loading default approvers:", { 
+      selectedTemplate, 
+      template, 
+      defaultApprovers: template?.defaultApprovers 
+    })
+    
+    if (template && template.defaultApprovers && template.defaultApprovers.length > 0) {
+      setApprovers([...template.defaultApprovers])
+      toast({
+        title: "Approvers Loaded",
+        description: `Loaded ${template.defaultApprovers.length} default approvers from template "${template.name}"`,
+      })
+      console.log("✅ Default approvers loaded:", template.defaultApprovers)
+    } else {
+      console.log("⚠️ No default approvers found for template:", template?.name)
+      // Don't clear existing approvers
+    }
   }
 
   const validateStep1 = () => {
@@ -238,7 +316,28 @@ function CreateDocumentContent() {
     try {
       let document;
       
-      if (isRevision && originalDocument) {
+      if (isEdit && editDocument) {
+        // Edit mode - update existing document
+        const updatedDocument = {
+          ...editDocument,
+          title: title.trim(),
+          type: selectedTemplate,
+          description: description.trim() || undefined,
+          updatedAt: new Date().toISOString(),
+          approvalSteps: approvers.map((approver, index) => ({
+            order: index + 1,
+            approverEmail: approver,
+            approverName: approver, // Could be improved with user lookup
+            status: "pending" as const,
+            timestamp: undefined,
+            comments: undefined
+          }))
+        }
+        
+        await EnhancedDocumentService.updateDocument(updatedDocument)
+        document = updatedDocument
+      } else if (isRevision && originalDocument) {
+        // Revision mode - create new document based on original
         document = await EnhancedDocumentService.createEditableRevision(
           originalDocument.id,
           revisionReason.trim(),
@@ -246,10 +345,11 @@ function CreateDocumentContent() {
           title.trim(),
           description.trim() || undefined,
           approvers,
-          approvalMode,
+          "flexible",
           resetAllApprovals
         )
       } else {
+        // Create new document
         document = await EnhancedDocumentService.createDocument(
         title.trim(),
         selectedTemplate,
@@ -257,8 +357,8 @@ function CreateDocumentContent() {
         user.email,
         description.trim() || undefined,
           approvers,
-          undefined,
-          approvalMode
+                      undefined,
+            "flexible"
         )
       }
 
@@ -266,16 +366,18 @@ function CreateDocumentContent() {
       setCurrentStep(3)
 
       toast({
-        title: isRevision ? "Revision Created Successfully" : "Document Created Successfully",
-        description: isRevision 
+        title: isEdit ? "Document Updated Successfully" : isRevision ? "Revision Created Successfully" : "Document Created Successfully",
+        description: isEdit 
+          ? `Document ${document.id} has been updated successfully`
+          : isRevision 
           ? `Revised document ${document.id} created. ${resetAllApprovals ? 'All approvers must approve again.' : 'Previous approvals preserved where applicable.'}`
           : `Document ${document.id} has been created and is ready for pickup`,
       })
     } catch (error) {
-      console.error("Error during document creation:", error)
+      console.error("Error during document operation:", error)
       toast({
-        title: "Error Creating Document",
-        description: "An error occurred while creating the document. Please try again.",
+        title: isEdit ? "Error Updating Document" : "Error Creating Document",
+        description: isEdit ? "An error occurred while updating the document. Please try again." : "An error occurred while creating the document. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -307,8 +409,13 @@ function CreateDocumentContent() {
               <FileText className="h-5 w-5 sm:h-6 sm:w-6 mr-2 text-blue-600 flex-shrink-0" />
               <div>
                 <h1 className="text-lg sm:text-2xl font-bold text-gray-900 truncate">
-                  {isRevision ? "Edit & Revise Document" : "Create New Document"}
+                  {isEdit ? "Edit Document" : isRevision ? "Edit & Revise Document" : "Create New Document"}
                 </h1>
+                {isEdit && editDocument && (
+                  <p className="text-sm text-gray-600">
+                    Editing: {editDocument.title} (ID: {editDocument.id})
+                  </p>
+                )}
                 {isRevision && originalDocument && (
                   <p className="text-sm text-gray-600">
                     Revising: {originalDocument.title} (ID: {originalDocument.id})
@@ -365,7 +472,7 @@ function CreateDocumentContent() {
                     <AlertTriangle className="h-5 w-5 text-orange-600 mt-0.5 flex-shrink-0" />
                     <div className="space-y-2">
                       <p className="text-sm font-medium text-orange-800">
-                        📝 Document Revision Options
+                        📋 Document Clone/Copy Options
                       </p>
                       <p className="text-sm text-orange-700">
                         You can choose whether to preserve existing approvals or require everyone to approve again. This will be configurable in the next step.
@@ -373,17 +480,17 @@ function CreateDocumentContent() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="revisionReason">Revision Reason *</Label>
+                    <Label htmlFor="revisionReason">Clone/Copy Reason *</Label>
                     <Textarea
                       id="revisionReason"
-                      placeholder="Explain why this document is being revised..."
+                      placeholder="Explain why this document is being cloned/copied..."
                       value={revisionReason}
                       onChange={(e) => setRevisionReason(e.target.value)}
                       rows={2}
                       className="border-orange-200 focus:border-orange-400"
                     />
                     <p className="text-sm text-orange-700">
-                      This reason will be recorded in the document history and shown to approvers.
+                      This reason will be recorded in the document history.
                     </p>
                   </div>
                 </div>
@@ -419,13 +526,28 @@ function CreateDocumentContent() {
                     </SelectContent>
                   </Select>
                   {selectedTemplate && (
-                    <div className="mt-2 p-3 bg-blue-50 rounded-md">
+                    <div className="mt-2 p-3 bg-blue-50 rounded-md space-y-2">
                       <p className="text-sm text-blue-800">
                         <strong>Template:</strong> {getSelectedTemplate()?.name}
                       </p>
                       <p className="text-sm text-blue-600">
                         <strong>Category:</strong> {getSelectedTemplate()?.category}
                       </p>
+                      {getSelectedTemplate()?.defaultApprovers && getSelectedTemplate()!.defaultApprovers.length > 0 && (
+                        <div className="border-t border-blue-200 pt-2 mt-2">
+                          <p className="text-sm text-blue-800 font-medium">Default Approvers:</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {getSelectedTemplate()!.defaultApprovers.map((approver, index) => (
+                              <Badge key={approver} variant="outline" className="text-xs bg-blue-100 text-blue-700">
+                                {index + 1}. {approver}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-xs text-blue-600 mt-1">
+                            ✅ These approvers will be automatically loaded to the next step
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -466,7 +588,7 @@ function CreateDocumentContent() {
                 <div className="space-y-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <div className="flex items-center space-x-2">
                     <Info className="h-5 w-5 text-blue-600" />
-                    <h4 className="font-medium text-blue-800">Previous Approval Status</h4>
+                    <h4 className="font-medium text-blue-800">Original Document Approval Status</h4>
                 </div>
 
                   {approvedApprovers.length > 0 && (
@@ -517,73 +639,49 @@ function CreateDocumentContent() {
                     </div>
                     <p className="text-xs text-blue-600 ml-6 mt-1">
                       {resetAllApprovals 
-                        ? "All approvers (including those who already approved) will need to approve again."
-                        : "Previously approved approvers will keep their approval status."
+                        ? "All approvers (including those who already approved the original) will need to approve this new document."
+                        : "Previously approved approvers will keep their approval status in the new document."
                       }
                     </p>
                   </div>
                               </div>
               )}
 
-              {/* Approval Mode Selection */}
-              <div className="space-y-3 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <Users className="h-5 w-5 text-gray-600" />
-                  <h4 className="font-medium text-gray-800">Approval Workflow Mode</h4>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-start space-x-3">
-                    <input
-                      type="radio"
-                      id="sequential"
-                      name="approvalMode"
-                      value="sequential"
-                      checked={approvalMode === "sequential"}
-                      onChange={(e) => setApprovalMode(e.target.value as ApprovalMode)}
-                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                    />
-                    <div className="flex-1">
-                      <Label htmlFor="sequential" className="font-medium text-gray-800 cursor-pointer">
-                        Sequential Approval (เรียงกัน)
-                      </Label>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Approvers must review in order. If one person is unavailable, the document will wait for them.
-                      </p>
+              {/* Approval workflow is now always flexible - UI selection removed */}
+
+              {/* Template Info and Load Default Approvers */}
+              {selectedTemplate && getSelectedTemplate()?.defaultApprovers && (
+                <div className="space-y-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <FileText className="h-5 w-5 text-green-600" />
+                      <h4 className="font-medium text-green-800">Template: {getSelectedTemplate()?.name}</h4>
                     </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={loadDefaultApprovers}
+                      className="text-green-700 border-green-300 hover:bg-green-100"
+                    >
+                      <Users className="h-4 w-4 mr-2" />
+                      Load Default Approvers
+                    </Button>
                   </div>
-                  
-                  <div className="flex items-start space-x-3">
-                    <input
-                      type="radio"
-                      id="flexible"
-                      name="approvalMode"
-                      value="flexible"
-                      checked={approvalMode === "flexible"}
-                      onChange={(e) => setApprovalMode(e.target.value as ApprovalMode)}
-                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                    />
-                    <div className="flex-1">
-                      <Label htmlFor="flexible" className="font-medium text-gray-800 cursor-pointer">
-                        Flexible Approval (ข้ามได้)
-                      </Label>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Approvers can review in any order. If one person is unavailable, others can still proceed.
-                      </p>
+                  <div>
+                    <p className="text-sm text-green-700 mb-2">Default Approvers ({getSelectedTemplate()!.defaultApprovers.length}):</p>
+                    <div className="flex flex-wrap gap-1">
+                      {getSelectedTemplate()!.defaultApprovers.map((approver, index) => (
+                        <Badge key={approver} variant="outline" className="text-xs bg-green-100 text-green-700 border-green-300">
+                          {index + 1}. {approver}
+                        </Badge>
+                      ))}
                     </div>
+                    <p className="text-xs text-green-600 mt-2">
+                      💡 Click "Load Default Approvers" to load recipients from template
+                    </p>
                   </div>
                 </div>
-                
-                <div className="flex items-start space-x-2 p-3 bg-blue-50 border border-blue-200 rounded">
-                  <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm text-blue-800">
-                    <strong>Example:</strong> {approvalMode === "sequential" 
-                      ? "If approver #2 is on leave, the document will wait for them before proceeding to approver #3."
-                      : "If approver #2 is on leave, approver #3 can still review and approve the document."
-                    }
-                  </div>
-                </div>
-              </div>
+              )}
 
               <div className="space-y-4">
                 <Label>Approvers *</Label>
@@ -663,7 +761,10 @@ function CreateDocumentContent() {
                   onClick={handleNextStep}
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "Creating..." : "Create Document"}
+                  {isSubmitting 
+                    ? (isEdit ? "Updating..." : "Creating...") 
+                    : (isEdit ? "Update Document" : isRevision ? "Create Revision" : "Create Document")
+                  }
                 </Button>
                   </div>
               </CardContent>
@@ -676,7 +777,7 @@ function CreateDocumentContent() {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <CheckCircle className="h-5 w-5 mr-2" />
-                Document Created Successfully
+                {isEdit ? "Document Updated Successfully" : isRevision ? "Revision Created Successfully" : "Document Created Successfully"}
                 </CardTitle>
               <CardDescription>Preview your document details and generate cover sheet</CardDescription>
               </CardHeader>

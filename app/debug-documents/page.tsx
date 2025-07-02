@@ -99,31 +99,7 @@ export default function DebugDocuments() {
     }
   }
 
-  const fixApprovalModes = async () => {
-    setIsLoading(true)
-    try {
-      console.log("🔧 Fixing approval modes for existing documents...")
-      const docs = await EnhancedDocumentService.getAllDocuments()
-      let fixedCount = 0
-      
-      for (const doc of docs) {
-        if (doc.workflow === "flow" && !doc.approvalMode) {
-          // Set default approval mode to sequential for existing documents
-          doc.approvalMode = "sequential"
-          await EnhancedDocumentService.updateDocument(doc)
-          fixedCount++
-          console.log(`✅ Fixed approval mode for document: ${doc.id}`)
-        }
-      }
-      
-      console.log(`✅ Fixed ${fixedCount} documents`)
-      await loadAllDocuments() // Reload to show updated data
-    } catch (error) {
-      console.error("❌ Fix error:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Approval mode fix function removed - workflow is now always flexible
 
   useEffect(() => {
     const fetchDocuments = async () => {
@@ -243,14 +219,7 @@ export default function DebugDocuments() {
                   Load All Documents
                 </Button>
                 
-                <Button 
-                  onClick={fixApprovalModes} 
-                  disabled={isLoading}
-                  className="w-full"
-                  variant="secondary"
-                >
-                  Fix Approval Modes
-                </Button>
+                {/* Fix Approval Modes button removed - workflow is now always flexible */}
                 
                 <Button 
                   onClick={clearAllDocuments} 

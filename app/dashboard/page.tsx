@@ -132,15 +132,12 @@ export default function Dashboard() {
       "In Transit - Rejected Document",
       "Delivered (Drop Off)",
       "Delivered (User)",
-      "Delivered (Hand to Hand)",
-      "Final Approval - Hand to Hand",
       "Final Approval - Delivered to Originator",  // Admin can close this
       "Received (User)",
       "Approved by Approver. Pending pickup for next step",
       "Approval Complete. Pending return to Originator",
       "REJECTED ROUTE",
       "REJECTED - Ready for Pickup",
-      "REJECTED - Hand to Hand",
       "REJECTED - Returned to Originator"  // Admin can still revise this
     ]
 
@@ -175,13 +172,25 @@ export default function Dashboard() {
     const dualStatus = getDualStatusFromDocument(document)
     
     return {
-      documentStatus: dualStatus.documentStatus ? DOCUMENT_STATUS_DISPLAY[dualStatus.documentStatus] : null,
+      documentStatus: dualStatus.documentStatus === null ? 
+        DOCUMENT_STATUS_DISPLAY["null"] : 
+        (dualStatus.documentStatus ? DOCUMENT_STATUS_DISPLAY[dualStatus.documentStatus] : null),
       trackingStatus: dualStatus.trackingStatus ? TRACKING_STATUS_DISPLAY[dualStatus.trackingStatus] : null
     }
   }
 
   const renderStatusBadge = (display: any, type: 'document' | 'tracking') => {
-    // Handle undefined/null status (for NEW documents)
+    // Handle null document status (shows as "–")
+    if (type === 'document' && (!display || display.text === "–")) {
+      return (
+        <Badge className="bg-gray-400 text-xs text-white">
+          <span className="mr-1">–</span>
+          <span className="hidden sm:inline">–</span>
+        </Badge>
+      )
+    }
+    
+    // Handle undefined/null status
     if (!display || display.text === undefined) {
       return (
         <Badge className="bg-gray-300 text-xs text-gray-600">
@@ -417,19 +426,21 @@ export default function Dashboard() {
         )
       }
 
-      // Admin can edit documents
-      actions.push(
-        <Link key="edit" href={`/document/${document.id}`}>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-blue-600 hover:text-blue-700"
-            title="Edit"
-          >
-            <Edit className="h-4 w-4" />
-          </Button>
-        </Link>
-      )
+      // Admin can edit documents (only NEW status)
+      if (document.status === "NEW") {
+        actions.push(
+          <Link key="edit" href={`/create-document?editId=${document.id}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-blue-600 hover:text-blue-700"
+              title="Edit Document"
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+          </Link>
+        )
+      }
 
       // Admin can cancel documents
       actions.push(
@@ -445,21 +456,19 @@ export default function Dashboard() {
         </Button>
       )
 
-      // Admin can create revision for rejected documents
-      if (EnhancedDocumentService.canCreateRevision(document)) {
-        actions.push(
-          <Button
-            key="revise"
-            variant="outline"
-            size="sm"
-            onClick={() => handleCreateRevision(document.id)}
-            className="text-orange-600 hover:text-orange-700"
-            title="Create Revision"
-          >
-            <RotateCcw className="h-4 w-4" />
-          </Button>
-        )
-      }
+      // Admin can clone/edit ANY document (for revision)
+      actions.push(
+        <Button
+          key="clone"
+          variant="outline"
+          size="sm"
+          onClick={() => handleCreateRevision(document.id)}
+          className="text-orange-600 hover:text-orange-700"
+          title="Revise Document (Clone & Edit)"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+      )
     }
 
     if (user?.role === "mail") {
@@ -594,7 +603,7 @@ export default function Dashboard() {
   }
 
   const handleCreateRevision = async (documentId: string) => {
-    // Redirect to create-document page for editing the revision
+    // Redirect to create-document page for cloning/editing the document
     router.push(`/create-document?revisionOf=${documentId}`)
   }
 
@@ -632,7 +641,7 @@ export default function Dashboard() {
     setShowDeliveryDialog(true)
   }
 
-  const handleDeliveryMethodConfirm = async (deliveryMethod: "mail_controller" | "hand_to_hand") => {
+  const handleDeliveryMethodConfirm = async (deliveryMethod: "mail_controller") => {
     try {
       const selectedCount = selectedDocuments.length
       for (const docId of selectedDocuments) {
@@ -655,11 +664,9 @@ export default function Dashboard() {
     }
   }
 
-  const handleSelectDeliveryMethod = async (documentId: string, method?: "mail_controller" | "hand_to_hand") => {
-    // Use provided method or show dialog to select delivery method
-    const deliveryMethod = method || (window.confirm(
-      "Select delivery method:\n\nOK = Mail Controller Pickup\nCancel = Hand-to-Hand Delivery"
-    ) ? "mail_controller" : "hand_to_hand")
+  const handleSelectDeliveryMethod = async (documentId: string, method?: "mail_controller") => {
+    // Use provided method, default to mail controller
+    const deliveryMethod = method || "mail_controller"
 
     try {
       const document = await EnhancedDocumentService.getDocumentById(documentId)
@@ -690,34 +697,6 @@ export default function Dashboard() {
           newTrackingStatus: dualStatus.trackingStatus
         }
         document.actionHistory.push(actionRecord)
-      } else {
-        // Hand-to-hand delivery - deliver directly to first approver
-        if (document.workflow === "flow" && document.approvalSteps && document.approvalSteps.length > 0) {
-          document.status = "Delivered (Hand to Hand)"
-          const dualStatus = convertLegacyToDualStatus(document.status)
-          document.documentStatus = dualStatus.documentStatus
-          document.trackingStatus = dualStatus.trackingStatus
-          
-          // Add action to history
-          const actionRecord = {
-            id: Date.now().toString(),
-            documentId: document.id,
-            action: "deliver" as ActionType,
-            performedBy: user!.email,
-            performedAt: new Date().toISOString(),
-            previousStatus: "NEW" as DocumentStatus,
-            newStatus: "Delivered (Hand to Hand)" as DocumentStatus,
-            comments: "Delivery method selected: Hand-to-Hand - Delivered to first approver",
-            deliveryMethod: "hand_to_hand" as "hand_to_hand",
-            previousDocumentStatus: undefined,
-            newDocumentStatus: dualStatus.documentStatus,
-            previousTrackingStatus: undefined,
-            newTrackingStatus: dualStatus.trackingStatus
-          }
-          document.actionHistory.push(actionRecord)
-        } else {
-          throw new Error("Hand-to-hand delivery requires approval workflow")
-        }
       }
 
       // Update in database
@@ -725,7 +704,7 @@ export default function Dashboard() {
 
       toast({
         title: "Delivery Method Selected",
-        description: `Document is now ready for ${deliveryMethod === "mail_controller" ? "mail controller pickup" : "hand-to-hand delivery"}`,
+        description: "Document is now ready for mail controller pickup",
       })
       
       // Refresh documents
@@ -749,13 +728,13 @@ export default function Dashboard() {
       return {
         type: "Flow",
         icon: <Users className="h-4 w-4" />,
-        info: `${completedSteps}/${document.approvalSteps.length} approvals`,
+        info: `${completedSteps}/${document.approvalSteps.length} recipients`,
         current: allApproved && document.status === "Approval Complete. Pending return to Originator" 
           ? "Ready to close workflow" 
           : currentStep && currentStep.status === "pending"
           ? `Current: ${currentStep.approverEmail}` 
           : allApproved 
-          ? "All approvals complete" 
+          ? "All recipients complete" 
           : "In progress"
       }
     } else {
@@ -781,7 +760,6 @@ export default function Dashboard() {
     // Check if document is in a state where approvers can act
     const canApproversAct = [
       "Delivered (Drop Off)",
-      "Delivered (Hand to Hand)", 
       "Received (User)",
       "With Approver for Review"
     ].includes(document.status)
@@ -798,39 +776,16 @@ export default function Dashboard() {
     const currentStepIndex = document.currentStepIndex || 0
     const isCurrentTurn = document.approvalSteps[currentStepIndex]?.approverEmail === user.email
     
-    // Default to sequential if approvalMode is not set
-    const approvalMode = document.approvalMode || "sequential"
+    // Approval mode is now always flexible
+    console.log(`Document ${document.id}: flexible mode, userEmail=${user.email}, status=${document.status}`)
 
-    // Debug logging
-    console.log(`Document ${document.id}: approvalMode=${approvalMode}, isCurrentTurn=${isCurrentTurn}, userEmail=${user.email}, status=${document.status}`)
-
-    if (approvalMode === "flexible") {
-      // In flexible mode, any pending approver can review if document is delivered
-      return (
-        <Badge className="bg-green-100 text-green-800 text-xs ml-2">
-          <CheckCircle className="h-3 w-3 mr-1" />
-          Ready to Review
-        </Badge>
-      )
-    } else if (approvalMode === "sequential") {
-      if (isCurrentTurn) {
-        return (
-          <Badge className="bg-green-100 text-green-800 text-xs ml-2">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Ready to Review
-          </Badge>
-        )
-      } else {
-        return (
-          <Badge className="bg-gray-100 text-gray-600 text-xs ml-2">
-            <Clock className="h-3 w-3 mr-1" />
-            Incoming
-          </Badge>
-        )
-      }
-    }
-
-    return null
+    // Flexible mode: any pending approver can review if document is delivered
+    return (
+      <Badge className="bg-green-100 text-green-800 text-xs ml-2">
+        <CheckCircle className="h-3 w-3 mr-1" />
+        Ready to Review
+      </Badge>
+    )
   }
 
   // Get current location based on document status
@@ -855,7 +810,6 @@ export default function Dashboard() {
         return document.recipient?.split('@')[0] || "Recipient"
       
       case "Delivered (Drop Off)":
-      case "Delivered (Hand to Hand)":
         if (document.workflow === "flow" && document.approvalSteps) {
           const currentStep = document.approvalSteps[document.currentStepIndex || 0]
           if (currentStep && currentStep.status === "pending") {
@@ -873,7 +827,6 @@ export default function Dashboard() {
         }
         return `${document.recipient?.split('@')[0] || "Recipient"} (Review)`
       
-      case "Final Approval - Hand to Hand":
       case "Final Approval - Delivered to Originator":
         return "Admin (Close workflow)"
       
@@ -963,15 +916,7 @@ export default function Dashboard() {
           status: "Delivered, awaiting receipt confirmation"
         }
       
-      case "Delivered (Hand to Hand)":
-        // Document delivered hand-to-hand - still with originator until received
-        const originatorName = document.createdBy.split('@')[0]
-        const originatorLocation = sampleLocations[document.createdBy] || sampleLocations[originatorName] || "Building A, Floor 2, Room 201"
-        return {
-          user: originatorName,
-          location: originatorLocation,
-          status: "Delivered hand-to-hand, awaiting receipt confirmation"
-        }
+
       
       case "Received (User)":
         // Now the approver/recipient has received the document
@@ -1006,7 +951,6 @@ export default function Dashboard() {
           status: "With Recipient (Received)"
         }
       
-      case "Final Approval - Hand to Hand":
       case "Final Approval - Delivered to Originator":
       case "REJECTED - Returned to Originator":
         // Back with creator
@@ -1134,10 +1078,9 @@ export default function Dashboard() {
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Title</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document Status</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tracking Status</th>
-                    <th className="hidden xl:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Next Recipient</th>
-                    <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Current Location</th>
+                    <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Updated by</th>
                     <th className="hidden md:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Workflow</th>
+                    <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Recipient</th>
                     <th className="hidden sm:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -1147,7 +1090,6 @@ export default function Dashboard() {
                     const workflowInfo = getWorkflowInfo(doc)
                     const dualStatusDisplay = getDualStatusDisplay(doc)
                     const currentLocation = getCurrentLocation(doc)
-                    const nextRecipient = getNextRecipient(doc)
                     const srNo = startIndex + index + 1
                     return (
                       <tr key={doc.id} className="hover:bg-gray-50">
@@ -1181,15 +1123,10 @@ export default function Dashboard() {
                         <td className="px-2 sm:px-4 py-4 whitespace-nowrap">
                           {renderStatusBadge(dualStatusDisplay.trackingStatus, 'tracking')}
                         </td>
-                        <td className="hidden xl:table-cell px-2 sm:px-4 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-blue-600">
-                            {nextRecipient}
-                          </div>
-                        </td>
                         <td className="hidden lg:table-cell px-2 sm:px-4 py-4">
                           <div className="text-sm">
                             <div className="font-medium text-gray-900">{currentLocation.user}</div>
-                            <div className="text-xs text-gray-500">({currentLocation.location})</div>
+                            <div className="text-xs text-gray-500">{currentLocation.status}</div>
                           </div>
                         </td>
                         <td className="hidden md:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{doc.type}</td>
@@ -1283,12 +1220,12 @@ export default function Dashboard() {
           <span>/</span>
           <span>Documents</span>
           <span>/</span>
-          <span className="text-gray-900">Document Distribution System</span>
+                          <span className="text-gray-900">Document Registration</span>
         </div>
 
         {/* Page Title */}
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Document Distribution System</h1>
+                      <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Document Registration</h1>
           {user.role === "admin" && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <Link href="/scan-qr" className="w-full sm:w-auto">
@@ -1372,15 +1309,21 @@ export default function Dashboard() {
 
         {/* Document Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          {/* Tabs Navigation - Full Width */}
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="active" className="flex items-center gap-2">
+          {/* Tabs Navigation - Left Aligned */}
+          <TabsList className="inline-flex h-auto p-0 bg-transparent border-b border-gray-200 w-full justify-start">
+            <TabsTrigger 
+              value="active" 
+              className="flex items-center gap-2 px-4 py-3 bg-transparent border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 hover:text-blue-600 rounded-none"
+            >
               <Activity className="h-4 w-4" />
-              Active Route ({activeDocuments.length})
+              Active Documents ({activeDocuments.length})
             </TabsTrigger>
-            <TabsTrigger value="history" className="flex items-center gap-2">
+            <TabsTrigger 
+              value="history" 
+              className="flex items-center gap-2 px-4 py-3 bg-transparent border-b-2 border-transparent data-[state=active]:border-blue-500 data-[state=active]:bg-transparent data-[state=active]:text-blue-600 hover:text-blue-600 rounded-none"
+            >
               <Archive className="h-4 w-4" />
-              Route History ({historyDocuments.length})
+              History ({historyDocuments.length})
             </TabsTrigger>
           </TabsList>
 
@@ -1479,19 +1422,7 @@ export default function Dashboard() {
                 </span>
               </Button>
 
-              <Button
-                onClick={() => handleDeliveryMethodConfirm("hand_to_hand")}
-                className="h-auto p-4 flex flex-col items-center gap-2 bg-green-50 hover:bg-green-100 text-green-700 border-2 border-green-200 hover:border-green-300"
-                variant="outline"
-              >
-                <div className="flex items-center gap-2">
-                  <Users className="h-6 w-6" />
-                  <span className="font-semibold">Hand-to-Hand Delivery</span>
-                </div>
-                <span className="text-sm text-green-600 text-center">
-                  Documents will be delivered directly to first approver
-                </span>
-              </Button>
+
             </div>
 
             <div className="flex justify-end gap-2">

@@ -94,7 +94,7 @@ export default function TemplatesPage() {
       <div className="min-h-screen bg-gray-50">
         <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
           <div className="flex items-center justify-between max-w-7xl mx-auto">
-            <h1 className="text-xl font-semibold text-gray-900">Document Templates</h1>
+            <h1 className="text-xl font-semibold text-gray-900">Distribution List template</h1>
           </div>
         </div>
         <div className="flex items-center justify-center h-64">
@@ -135,26 +135,25 @@ export default function TemplatesPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between max-w-7xl mx-auto">
+        <div className="flex items-center justify-between w-full">
           <div className="flex items-center space-x-4">
-            <h1 className="text-xl font-semibold text-gray-900">Document Templates</h1>
+            <h1 className="text-xl font-semibold text-gray-900">Distribution List template</h1>
           </div>
           <div className="flex items-center space-x-2">
-            <Badge variant="outline">{templates.length} Templates</Badge>
             {user.role === "admin" && (
-                <Link href="/templates/create">
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Template
-                  </Button>
-                </Link>
+              <Link href="/templates/create">
+                <Button>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add List
+                </Button>
+              </Link>
             )}
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="w-full px-4 py-6">
         {templates.length === 0 ? (
           <Card>
             <CardContent className="text-center py-12">
@@ -169,15 +168,15 @@ export default function TemplatesPage() {
               {user.role === "admin" && (
                 <Link href="/templates/create">
                   <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Template
-                </Button>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add List
+                  </Button>
                 </Link>
               )}
             </CardContent>
           </Card>
         ) : (
-          <div className="bg-white rounded-lg border border-gray-200">
+          <div className="bg-white rounded-lg border border-gray-200 w-full">
             {/* Table Header with Filters */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 border-b border-gray-200 gap-4">
               <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -196,9 +195,7 @@ export default function TemplatesPage() {
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sr.</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template Name</th>
                     <th className="hidden md:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fields</th>
-                    <th className="hidden lg:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usage</th>
-                    <th className="hidden sm:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visibility</th>
+                    {/* Fields, Usage, and Visibility columns removed */}
                     <th className="hidden sm:table-cell px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
                     <th className="px-2 sm:px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -218,13 +215,7 @@ export default function TemplatesPage() {
                     </div>
                       </td>
                       <td className="hidden md:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{template.category}</td>
-                      <td className="hidden lg:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{template.templateFields.length}</td>
-                      <td className="hidden lg:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">{template.usageCount || 0}</td>
-                      <td className="hidden sm:table-cell px-2 sm:px-4 py-4 whitespace-nowrap">
-                      <Badge variant={template.isPublic ? "default" : "outline"} className="text-xs">
-                        {template.isPublic ? "Public" : "Private"}
-                      </Badge>
-                      </td>
+                      {/* Fields, Usage, and Visibility columns removed */}
                       <td className="hidden sm:table-cell px-2 sm:px-4 py-4 whitespace-nowrap text-sm text-gray-900">
                         {new Date(template.createdAt).toLocaleDateString()}
                       </td>
